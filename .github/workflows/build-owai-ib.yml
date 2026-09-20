@@ -70,15 +70,16 @@ on:
         default: false
 
 env:
-  # ⚠️ push 触发时 inputs 为空，所有 env 必须带 fallback。
-  # boolean 不能用 `||`（显式 false 会被吞成 true），必须用显式比较。
+  # ⚠️ push 触发时 inputs 为空（布尔量变成空字符串 ''）。GH 表达式里 `'' == false`
+  # 会被判为 true，所以绝不能用 `== false` 做默认 true 的 fallback（会翻成 false）。
+  # 正确做法：用 `== true || == ''` 识别「未设置或显式 true → true」，只有显式 false 才翻 false。
   TARGET: ${{ inputs.target || 'mediatek/filogic' }}
   BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
   REF: ${{ inputs.openwrt_ref || '' }}
   USE_APK: ${{ inputs.use_apk == true && 'true' || 'false' }}
-  STANDALONE: ${{ inputs.standalone == false && 'false' || 'true' }}
+  STANDALONE: ${{ (inputs.standalone == true || inputs.standalone == '' || inputs.standalone == null) && 'true' || 'false' }}
   EXTRA_PKGS: ${{ inputs.extra_packages || '' }}
-  KIDDIN9_FEED: ${{ inputs.kiddin9_feed == false && 'false' || 'true' }}
+  KIDDIN9_FEED: ${{ (inputs.kiddin9_feed == true || inputs.kiddin9_feed == '' || inputs.kiddin9_feed == null) && 'true' || 'false' }}
   VERSION_REPO: ${{ inputs.version_repo || 'https://dl.openwrt.ai/releases/25.12' }}
   VERSION_NUMBER: ${{ inputs.version_number || '25.12-owai' }}
 
@@ -241,19 +242,22 @@ jobs:
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
 
-      - name: Verify IB contains kmods (standalone must have them)
+      - name: Verify IB (kmods required when STANDALONE)
         working-directory: openwrt
         run: |
           IB=$(ls bin/targets/*/*/*imagebuilder*.tar.zst | head -1)
           echo "IB=$IB"
           # 数 tarball 内 packages/ 里的 kmod-*.ipk 数量
           KC=$(tar -tf "$IB" | grep -c 'packages/.*/kmod-')
-          echo "kmod 数量 = $KC"
-          if [ "$KC" -eq 0 ]; then
-            echo "::error::IB 内未包含任何 kmod！standalone 构建失败，请检查 package/install 是否真的编了包。"
+          echo "kmod 数量 = $KC  (STANDALONE=$STANDALONE)"
+          if [ "$STANDALONE" = "true" ] && [ "$KC" -eq 0 ]; then
+            echo "::error::STANDALONE IB 内未包含任何 kmod！请检查 package/install 是否真的编了包。"
             exit 1
           fi
-          echo "kmod 校验通过 ✓"
+          if [ "$STANDALONE" = "false" ]; then
+            echo "注意：STANDALONE=false，IB 不含本地 kmod（依赖远程，而 owai 无远程 kmod → 此 IB 对 owai 不可用）"
+          fi
+          echo "kmod 校验完成 ✓"
 
       - name: Inspect produced IB (verify owai layout)
         working-directory: openwrt
