@@ -65,9 +65,9 @@ on:
         required: false
         default: '25.12-owai'
       make_release:
-        description: '是否创建 GitHub Release'
+        description: '是否创建 GitHub Release（默认 true：构建后自动发 Release 页面）'
         type: boolean
-        default: false
+        default: true
 
 env:
   # ⚠️ push 触发时 inputs 为空（布尔量变成空字符串 ''）。GH 表达式里 `'' == false`
@@ -247,6 +247,22 @@ jobs:
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
 
+      # ⚠️ 先把产物打包+上传，保证即使后续 Verify/Inspect 失败也能拿到 IB
+      - name: Package artifacts
+        working-directory: openwrt
+        run: |
+          mkdir -p ../out
+          cp bin/targets/*/*/*imagebuilder*.tar.zst ../out/
+          cd ../out && sha256sum *imagebuilder*.tar.zst > sha256sums
+          ls -lh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: owai-ib-${{ inputs.target }}-${{ github.run_number }}
+          path: out/
+          retention-days: 14
+
       - name: Verify IB (kmods required when STANDALONE)
         working-directory: openwrt
         run: |
@@ -321,26 +337,14 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Package artifacts
-        working-directory: openwrt
-        run: |
-          mkdir -p ../out
-          cp bin/targets/*/*/*imagebuilder*.tar.zst ../out/
-          cd ../out && sha256sum *imagebuilder*.tar.zst > sha256sums
-          ls -lh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: owai-ib-${{ inputs.target }}-${{ github.run_number }}
-          path: out/
-          retention-days: 14
-
       - name: Create release
-        if: ${{ inputs.make_release }}
+        # push 触发时 make_release 输入为空字符串（非默认 true），故用 `!= false`：
+        # 未设置/显式 true → 发 Release；仅显式 false → 不发。
+        if: ${{ inputs.make_release != false }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ib-${{ inputs.version_number }}-${{ github.run_number }}
+          # 用 run_id（每次运行唯一）做 tag，避免重跑时与已存在 tag 冲突
+          tag_name: ib-${{ inputs.version_number }}-${{ github.run_id }}
           name: OWAI-aligned ImageBuilder ${{ inputs.target }} ${{ inputs.version_number }}
           files: |
             out/*.tar.zst

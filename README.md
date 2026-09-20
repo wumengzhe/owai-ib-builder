@@ -19,7 +19,7 @@
 | `standalone` | `true` | 自带全部包（含 kmod）；关掉则固件缺 kmod，对 owai 不可用 |
 | `kiddin9_feed` | `true` | owai 那些包就是 op-packages 编出来的 |
 | `version_repo` | `https://dl.openwrt.ai/releases/25.12` | version.mk 里的远端基址（仅影响 %U 展示，不影响捆绑包） |
-| `make_release` | `false` | 是否发 GitHub Release |
+| `make_release` | `true` | 构建后自动发 GitHub Release（tag 用 run_id 唯一，重跑不冲突） |
 
 产物：ImageBuilder `tar.zst`（自带与自身内核匹配的 kmod），以 **Artifact** 提供。
 
