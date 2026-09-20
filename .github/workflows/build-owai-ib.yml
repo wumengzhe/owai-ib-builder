@@ -1,0 +1,294 @@
+name: Build OWAI-aligned ImageBuilder
+
+# 参考 kiddin9/Kwrt 的仓库结构，但目标不同：
+#   Kwrt  = 编固件（openwrt/openwrt@openwrt-25.12 + 自家 op-packages feed，默认 APK）
+#   本工作流 = 只编 **ImageBuilder**，并刻意保持 **opkg**（不与 owai 同格式就废了）
+#
+# 为什么不用 .config 里写 CONFIG_VERSION_REPO / CONFIG_PER_FEED_REPO：
+#   在 openwrt-25.12 分支里，这些符号已从 Config-build.in / Config-images.in 消失
+#   （已用 GitHub API + jsDelivr 双重实锤），写进 .config 会被 Kconfig 直接丢弃。
+#   所以本流程直接在 make 文件层对齐 owai：
+#     - include/version.mk   : VERSION_REPO/NUMBER/DIST 默认值改成 owai（%U 因此变 owai）
+#     - include/feeds.mk     : 重写 FeedSourcesAppendOPKG —— 硬编码 owai 五分流，
+#                             删掉 core 行(%U/targets/%S/packages) 与 kmods 行
+#                             （owai 无 targets/ 分流，实测 404；kmod 由 IB 本地提供）
+#     - target/imagebuilder/Makefile : 删掉无条件 'option check_signature'
+#                             （owai 的包不是我们签的，开了会整盘拒绝安装）
+#
+# owai 25.12 实测存在的分流：base / luci / packages / routing / video / kiddin9
+# owai 25.12 实测 404 的分流：telephony / targets(含 kmods)
+#
+# 架构结论：IB 必须 CONFIG_IB_STANDALONE=y（默认即 y if !BUILDBOT），自带与自身
+#   内核匹配的 kmod；owai 远程只用于拉 userland 增量更新。若关闭 standalone，
+#   固件将无 kmod 来源（owai 没有可用的远程 kmod）。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/**']
+    inputs:
+      target:
+        description: '目标，格式 <board>/<subtarget>'
+        required: true
+        default: 'mediatek/filogic'
+      openwrt_branch:
+        description: 'openwrt/openwrt 分支'
+        required: true
+        default: 'openwrt-25.12'
+      openwrt_ref:
+        description: '可选：精确 commit sha（留空用分支头）'
+        required: false
+        default: ''
+      use_apk:
+        description: 'true=编 APK 版 IB（默认 false；必须保持 opkg 才能与 owai 互通）'
+        type: boolean
+        default: false
+      standalone:
+        description: 'true=CONFIG_IB_STANDALONE（自带所有包，含 kmod）。false 则固件将缺 kmod，勿用'
+        type: boolean
+        default: true
+      extra_packages:
+        description: 'standalone 时额外要编进 IB 的包（空格分隔），例如 luci-app-ssr-plus'
+        required: false
+        default: ''
+      kiddin9_feed:
+        description: '挂载 kiddin9/op-packages（owai 那些包就是这个 feed 编出来的）'
+        type: boolean
+        default: true
+      version_repo:
+        description: '写进 IB 的远端仓库基址（默认就是 owai 25.12）'
+        required: false
+        default: 'https://dl.openwrt.ai/releases/25.12'
+      version_number:
+        description: 'VERSION_NUMBER（仅展示用，不影响 %U）'
+        required: false
+        default: '25.12-owai'
+      make_release:
+        description: '是否创建 GitHub Release'
+        type: boolean
+        default: false
+
+env:
+  TARGET: ${{ inputs.target }}
+  BRANCH: ${{ inputs.openwrt_branch }}
+  REF: ${{ inputs.openwrt_ref }}
+  USE_APK: ${{ inputs.use_apk }}
+  STANDALONE: ${{ inputs.standalone }}
+  EXTRA_PKGS: ${{ inputs.extra_packages }}
+  KIDDIN9_FEED: ${{ inputs.kiddin9_feed }}
+  VERSION_REPO: ${{ inputs.version_repo }}
+  VERSION_NUMBER: ${{ inputs.version_number }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Show parameters
+        run: |
+          echo "target        = $TARGET"
+          echo "branch        = $BRANCH  ref=${REF:-<head>}"
+          echo "use_apk       = $USE_APK   (false=opkg，与 owai 同格式)"
+          echo "standalone    = $STANDALONE (true 才带 kmod)"
+          echo "kiddin9 feed  = $KIDDIN9_FEED"
+          echo "version_repo  = $VERSION_REPO"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+            gettext git libncurses-dev libssl-dev python3-setuptools rsync swig \
+            unzip zlib1g-dev file wget zstd
+          sudo apt-get clean
+
+      - name: Clone openwrt source
+        run: |
+          git clone --depth 1 -b "$BRANCH" https://github.com/openwrt/openwrt.git openwrt
+          cd openwrt
+          if [ -n "$REF" ]; then
+            git fetch --depth 1 origin "$REF"
+            git checkout "$REF"
+          fi
+          git log -1 --format='SOURCE=%H %cd'
+
+      - name: Prepare feeds.conf
+        working-directory: openwrt
+        run: |
+          # owai 没有 telephony 分流（实测 404），留着会在 feeds 解析时浪费时间
+          sed -i "/telephony/d" feeds.conf.default
+          if [ "$KIDDIN9_FEED" = "true" ]; then
+            sed -i '$a src-git kiddin9 https://github.com/kiddin9/op-packages.git;main' feeds.conf.default
+          fi
+          echo "--- feeds.conf.default ---"
+          cat feeds.conf.default
+
+      # ------------------------------------------------------------------
+      # 关键：在 make 文件层对齐 owai，绕开 openwrt-25.12 已不稳定的 Kconfig 符号
+      # ------------------------------------------------------------------
+      - name: Patch makefiles to align with OWAI (opkg repo layout)
+        working-directory: openwrt
+        run: |
+          python3 - <<'PY'
+          import re, os, sys
+          REPO = os.environ["VERSION_REPO"]
+          VNUM = os.environ["VERSION_NUMBER"]
+
+          # 1) include/version.mk —— %U / %V / %D 的默认值改成 owai（不依赖 Kconfig 符号）
+          p = "include/version.mk"
+          s = open(p).read()
+          s = re.sub(r"VERSION_NUMBER:=\$\(if \$\(VERSION_NUMBER\),\$\(VERSION_NUMBER\),[^)]*\)",
+                     "VERSION_NUMBER:=%s" % VNUM, s)
+          s = re.sub(r"VERSION_DIST:=\$\(if \$\(VERSION_DIST\),\$\(VERSION_DIST\),[^)]*\)",
+                     "VERSION_DIST:=OpenWrt", s)
+          s = re.sub(r"VERSION_REPO:=\$\(if \$\(VERSION_REPO\),\$\(VERSION_REPO\),[^)]*\)",
+                     "VERSION_REPO:=%s" % REPO, s)
+          open(p, "w").write(s)
+          print("[version.mk] VERSION_REPO ->", REPO)
+
+          # 2) include/feeds.mk —— 重写 FeedSourcesAppendOPKG：硬编码 owai 五分流，去 core/kmods
+          p = "include/feeds.mk"
+          s = open(p).read()
+          new = (
+              "define FeedSourcesAppendOPKG\n"
+              "( \\\n"
+              "  echo 'src/gz %d_base %U/packages/%A/base'; \\\n"
+              "  echo 'src/gz %d_luci %U/packages/%A/luci'; \\\n"
+              "  echo 'src/gz %d_packages %U/packages/%A/packages'; \\\n"
+              "  echo 'src/gz %d_routing %U/packages/%A/routing'; \\\n"
+              "  echo 'src/gz %d_video %U/packages/%A/video'; \\\n"
+              "  echo 'src/gz %d_kiddin9 %U/packages/%A/kiddin9'; \\\n"
+              ") >> $(1)\n"
+              "endef\n"
+          )
+          s, n = re.subn(r"define FeedSourcesAppendOPKG\n.*?\nendef\n", new, s, count=1, flags=re.S)
+          if n == 0:
+              print("[feeds.mk] !! 未匹配到 FeedSourcesAppendOPKG，请检查 openwrt 源码"); sys.exit(1)
+          open(p, "w").write(s)
+          print("[feeds.mk] FeedSourcesAppendOPKG 已重写（owai 五分流，去 core/kmods）")
+
+          # 3) target/imagebuilder/Makefile —— 删掉无条件 'option check_signature'
+          p = "target/imagebuilder/Makefile"
+          s = open(p).read()
+          s2, n = re.subn(r"\n[ \t]*echo 'option check_signature'.*\n", "\n", s)
+          if n == 0:
+              print("[imagebuilder/Makefile] 警告：未找到 option check_signature 行（可能已改）")
+          else:
+              open(p, "w").write(s2)
+              print("[imagebuilder/Makefile] 已删除 option check_signature (n=%d)" % n)
+          PY
+
+      - name: Update and install feeds
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          # 注意：刻意不用 Kwrt 的 `install -a -p kiddin9 -f` ——
+          # op-packages 根目录带 luci-base/luci-mod-*/luci-nginx 等 core 组件，
+          # 一把梭会把整棵 LuCI 换掉。这里只做普通全装。
+          ./scripts/feeds install -a
+
+      - name: Generate .config
+        working-directory: openwrt
+        run: |
+          BOARD="${TARGET%%/*}"
+          SUBTARGET="${TARGET##*/}"
+          {
+            echo "CONFIG_TARGET_${BOARD}=y"
+            echo "CONFIG_TARGET_${BOARD}_${SUBTARGET}=y"
+            echo "CONFIG_SIGNED_PACKAGES=n"
+            echo "CONFIG_SIGNATURE_CHECK=n"
+            if [ "$USE_APK" = "true" ]; then
+              echo "CONFIG_USE_APK=y"
+            else
+              echo "# CONFIG_USE_APK is not set"
+            fi
+            if [ "$STANDALONE" = "true" ]; then
+              echo "CONFIG_IB_STANDALONE=y"
+              for p in $EXTRA_PKGS; do echo "CONFIG_PACKAGE_${p}=y"; done
+            else
+              echo "# CONFIG_IB_STANDALONE is not set"
+            fi
+          } >> .config
+          make defconfig
+          echo "--- 生效的关键配置 ---"
+          grep -E '^(CONFIG_USE_APK|CONFIG_IB_STANDALONE|CONFIG_SIGNED_PACKAGES|CONFIG_TARGET_)' .config | head -20
+
+      - name: Download sources
+        working-directory: openwrt
+        run: |
+          make -j$(nproc) download V=s
+
+      - name: Build ImageBuilder
+        working-directory: openwrt
+        run: |
+          make -j$(nproc) target/imagebuilder/compile V=s
+          ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
+
+      - name: Inspect produced IB (verify owai layout)
+        working-directory: openwrt
+        run: |
+          IB=$(ls bin/targets/*/*/*imagebuilder*.tar.zst | head -1)
+          echo "IB=$IB"
+          mkdir -p /tmp/ib
+          tar -I zstd -xf "$IB" -C /tmp/ib --wildcards '*/repositories.conf' '*/repositories' 2>/dev/null || true
+          D=$(find /tmp/ib -maxdepth 1 -type d -name '*imagebuilder*' | head -1)
+          echo "--- $D/repositories.conf ---"; cat "$D/repositories.conf" 2>/dev/null
+          echo "--- $D/repositories ---";      cat "$D/repositories"      2>/dev/null
+          echo ""
+          echo "--- 校验 IB 内 repositories.conf 的每个远程源是否 200 ---"
+          python3 - "$D/repositories.conf" <<'PY'
+          import sys, urllib.request
+          f = sys.argv[1]
+          try:
+              lines = open(f).read().splitlines()
+          except Exception as e:
+              print("无法读取", f, e); sys.exit(0)
+          urls = [l.split()[2] for l in lines if l.startswith("src/gz") and len(l.split())>=3]
+          for u in urls:
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(u+"/Packages.gz", method="HEAD"), timeout=20)
+                  print("  %s %s" % (r.status, u))
+              except Exception as e:
+                  print("  %s %s" % (getattr(e,'code',type(e).__name__), u))
+          PY
+          {
+            echo "## IB 产物"
+            echo ""
+            echo "- 文件: \`$(basename "$IB")\`  ($(du -h "$IB" | cut -f1))"
+            echo "- 包管理: $( [ -f "$D/repositories.conf" ] && echo opkg || echo apk )"
+            echo '```'
+            cat "$D/repositories.conf" 2>/dev/null || cat "$D/repositories" 2>/dev/null
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Package artifacts
+        working-directory: openwrt
+        run: |
+          mkdir -p ../out
+          cp bin/targets/*/*/*imagebuilder*.tar.zst ../out/
+          cd ../out && sha256sum *imagebuilder*.tar.zst > sha256sums
+          ls -lh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: owai-ib-${{ inputs.target }}-${{ github.run_number }}
+          path: out/
+          retention-days: 14
+
+      - name: Create release
+        if: ${{ inputs.make_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ib-${{ inputs.version_number }}-${{ github.run_number }}
+          name: OWAI-aligned ImageBuilder ${{ inputs.target }} ${{ inputs.version_number }}
+          files: |
+            out/*.tar.zst
+            out/sha256sums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
