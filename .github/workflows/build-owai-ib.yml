@@ -24,14 +24,11 @@ name: Build OWAI-aligned ImageBuilder
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/**']
     inputs:
-      target:
-        description: '目标，格式 <board>/<subtarget>'
-        required: true
-        default: 'mediatek/filogic'
+      targets:
+        description: '要编译的 target 列表（JSON 数组）；默认三平台。只编某个就改这里'
+        required: false
+        default: '["mediatek/filogic","qualcommax/ipq807x","rockchip/armv8"]'
       openwrt_branch:
         description: 'openwrt/openwrt 分支'
         required: true
@@ -68,12 +65,15 @@ on:
         description: '是否创建 GitHub Release（默认 true：构建后自动发 Release 页面）'
         type: boolean
         default: true
+  push:
+    branches: [main]
+    paths: ['.github/workflows/**']
 
 env:
   # ⚠️ push 触发时 inputs 为空（布尔量变成空字符串 ''）。GH 表达式里 `'' == false`
   # 会被判为 true，所以绝不能用 `== false` 做默认 true 的 fallback（会翻成 false）。
   # 正确做法：用 `== true || == ''` 识别「未设置或显式 true → true」，只有显式 false 才翻 false。
-  TARGET: ${{ inputs.target || 'mediatek/filogic' }}
+  TARGET: ${{ matrix.target }}
   BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
   REF: ${{ inputs.openwrt_ref || '' }}
   USE_APK: ${{ inputs.use_apk == true && 'true' || 'false' }}
@@ -86,6 +86,12 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    strategy:
+      # 三平台并行；fail-fast:false 让单个 target 失败不拖垮其余两个
+      fail-fast: false
+      matrix:
+        # push 触发时 inputs.targets 为空 → 回退到默认三平台 JSON 数组
+        target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","rockchip/armv8"]') }}
     steps:
       - name: Show parameters
         run: |
@@ -259,7 +265,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: owai-ib-${{ inputs.target }}-${{ github.run_number }}
+          name: owai-ib-${{ matrix.target }}-${{ github.run_id }}
           path: out/
           retention-days: 14
 
@@ -343,9 +349,11 @@ jobs:
         if: ${{ inputs.make_release != false }}
         uses: softprops/action-gh-release@v2
         with:
-          # 用 run_id（每次运行唯一）做 tag，避免重跑时与已存在 tag 冲突
-          tag_name: ib-${{ inputs.version_number }}-${{ github.run_id }}
-          name: OWAI-aligned ImageBuilder ${{ inputs.target }} ${{ inputs.version_number }}
+          # 用 run_id（每次运行唯一）+ matrix.target 做 tag：
+          #   - 三个并行 job 共享同一 run_id，必须带 target 区分，否则会抢同一个 tag；
+          #   - target 形如 mediatek/filogic 含 "/"（非法 tag 字符），用 replace() 改成 "-"。
+          tag_name: ib-${{ inputs.version_number }}-${{ replace(matrix.target, '/', '-') }}-${{ github.run_id }}
+          name: OWAI-aligned ImageBuilder ${{ matrix.target }} ${{ inputs.version_number }}
           files: |
             out/*.tar.zst
             out/sha256sums
