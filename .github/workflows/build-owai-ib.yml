@@ -224,11 +224,40 @@ jobs:
         run: |
           make -j$(nproc) download V=s
 
+      # ------------------------------------------------------------------
+      # ⚠️ 致命修正：STANDALONE IB 通过 $(wildcard $(PACKAGE_SUBDIRS)) 拷贝
+      #    bin/packages/*/*.ipk（含 kmod）。只调 target/imagebuilder/compile
+      #    不会触发包编译 → IB 内 packages 为空（无 kmod → 废）。
+      #    必须先 package/install（含 toolchain/kernel/全部包编译+安装），
+      #    再单独编 IB。
+      # ------------------------------------------------------------------
+      - name: Build all packages (populate bin/packages for STANDALONE IB)
+        working-directory: openwrt
+        run: |
+          make -j$(nproc) package/install V=s
+          echo "--- bin/packages 是否已填充（应有 base/kmod）---"
+          ls bin/packages/*/base/ 2>/dev/null | head -3 || true
+          ls bin/packages/*/ | head
+
       - name: Build ImageBuilder
         working-directory: openwrt
         run: |
           make -j$(nproc) target/imagebuilder/compile V=s
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
+
+      - name: Verify IB contains kmods (standalone must have them)
+        working-directory: openwrt
+        run: |
+          IB=$(ls bin/targets/*/*/*imagebuilder*.tar.zst | head -1)
+          echo "IB=$IB"
+          # 数 tarball 内 packages/ 里的 kmod-*.ipk 数量
+          KC=$(tar -tf "$IB" | grep -c 'packages/.*/kmod-')
+          echo "kmod 数量 = $KC"
+          if [ "$KC" -eq 0 ]; then
+            echo "::error::IB 内未包含任何 kmod！standalone 构建失败，请检查 package/install 是否真的编了包。"
+            exit 1
+          fi
+          echo "kmod 校验通过 ✓"
 
       - name: Inspect produced IB (verify owai layout)
         working-directory: openwrt
