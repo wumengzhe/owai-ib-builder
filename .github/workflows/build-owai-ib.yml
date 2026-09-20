@@ -34,9 +34,9 @@ on:
         required: true
         default: 'openwrt-25.12'
       openwrt_ref:
-        description: '可选：精确 commit sha（留空用分支头）'
+        description: '精确 commit sha（默认钉在 6.12.108 代 772205402546）。该代与 wmz-lede-multisize 源树内核一致，能让 assembler「镜像定义修复」改写 makefile 时成为 no-op，从而消除 make info 崩溃（kernel version/hash file missing）。留空则回退到 openwrt_branch 头——会随上游内核 bump 漂移并重新与源树脱代，仅用于临时验证，勿用于稳定构建。'
         required: false
-        default: ''
+        default: '772205402546'
       use_apk:
         description: 'true=编 APK 版 IB（默认 false；必须保持 opkg 才能与 owai 互通）'
         type: boolean
