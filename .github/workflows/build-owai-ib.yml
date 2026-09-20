@@ -70,15 +70,17 @@ on:
         default: false
 
 env:
-  TARGET: ${{ inputs.target }}
-  BRANCH: ${{ inputs.openwrt_branch }}
-  REF: ${{ inputs.openwrt_ref }}
-  USE_APK: ${{ inputs.use_apk }}
-  STANDALONE: ${{ inputs.standalone }}
-  EXTRA_PKGS: ${{ inputs.extra_packages }}
-  KIDDIN9_FEED: ${{ inputs.kiddin9_feed }}
-  VERSION_REPO: ${{ inputs.version_repo }}
-  VERSION_NUMBER: ${{ inputs.version_number }}
+  # ⚠️ push 触发时 inputs 为空，所有 env 必须带 fallback。
+  # boolean 不能用 `||`（显式 false 会被吞成 true），必须用显式比较。
+  TARGET: ${{ inputs.target || 'mediatek/filogic' }}
+  BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
+  REF: ${{ inputs.openwrt_ref || '' }}
+  USE_APK: ${{ inputs.use_apk == true && 'true' || 'false' }}
+  STANDALONE: ${{ inputs.standalone == false && 'false' || 'true' }}
+  EXTRA_PKGS: ${{ inputs.extra_packages || '' }}
+  KIDDIN9_FEED: ${{ inputs.kiddin9_feed == false && 'false' || 'true' }}
+  VERSION_REPO: ${{ inputs.version_repo || 'https://dl.openwrt.ai/releases/25.12' }}
+  VERSION_NUMBER: ${{ inputs.version_number || '25.12-owai' }}
 
 jobs:
   build:
@@ -108,18 +110,17 @@ jobs:
           sudo apt-get clean
 
       - name: Clone openwrt source
-        run: |
-          git clone --depth 1 -b "$BRANCH" https://github.com/openwrt/openwrt.git openwrt
-          cd openwrt
-          if [ -n "$REF" ]; then
-            git fetch --depth 1 origin "$REF"
-            git checkout "$REF"
-          fi
-          git log -1 --format='SOURCE=%H %cd'
+        uses: actions/checkout@v4
+        with:
+          repository: openwrt/openwrt
+          ref: ${{ inputs.openwrt_ref || inputs.openwrt_branch || 'openwrt-25.12' }}
+          fetch-depth: 1
+          path: openwrt
 
       - name: Prepare feeds.conf
         working-directory: openwrt
         run: |
+          git log -1 --format='SOURCE=%H %cd'
           # owai 没有 telephony 分流（实测 404），留着会在 feeds 解析时浪费时间
           sed -i "/telephony/d" feeds.conf.default
           if [ "$KIDDIN9_FEED" = "true" ]; then
