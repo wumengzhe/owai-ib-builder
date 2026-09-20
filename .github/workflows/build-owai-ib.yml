@@ -225,25 +225,21 @@ jobs:
           make -j$(nproc) download V=s
 
       # ------------------------------------------------------------------
-      # ⚠️ 致命修正：STANDALONE IB 通过 $(wildcard $(PACKAGE_SUBDIRS)) 拷贝
-      #    bin/packages/*/*.ipk（含 kmod）。只调 target/imagebuilder/compile
-      #    不会触发包编译 → IB 内 packages 为空（无 kmod → 废）。
-      #    必须先 package/install（含 toolchain/kernel/全部包编译+安装），
-      #    再单独编 IB。
+      # ⚠️ 构建顺序（OpenWrt 标准 phase 顺序，**必须显式逐级**，否则 top-level
+      #    `make package/install` 会跳过编译、且宿主 opkg 未构建 → 127 失败）：
+      #    tools → toolchain → target/compile(kernel) → package/compile
+      #    (含宿主 opkg 的 HOST_BUILD) → package/install(填充 bin/packages)
+      #    → target/imagebuilder/compile。绝不单独调 package/install / IB 编译。
+      #    注：25.12 已无 tools/opkg，宿主 opkg 来自 package/system/opkg host 构建。
       # ------------------------------------------------------------------
-      - name: Build all packages (populate bin/packages for STANDALONE IB)
+      - name: Build toolchain, kernel, all packages, then ImageBuilder
         working-directory: openwrt
         run: |
-          make -j$(nproc) package/install V=s
-          echo "--- bin/packages 是否已填充（应有 base/kmod）---"
-          ls bin/packages/*/base/ 2>/dev/null | head -3 || true
-          ls bin/packages/*/ | head
-
-      - name: Build ImageBuilder
-        working-directory: openwrt
-        run: |
-          make -j$(nproc) target/imagebuilder/compile V=s
+          make -j$(nproc) tools/install toolchain/install target/compile \
+                          package/compile package/install target/imagebuilder/compile V=s
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
+          echo "--- bin/packages 是否含 kmod（抽查）---"
+          find bin/packages -name 'kmod-*.ipk' | head -3 || true
 
       - name: Verify IB contains kmods (standalone must have them)
         working-directory: openwrt
