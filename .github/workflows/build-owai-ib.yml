@@ -73,7 +73,9 @@ env:
   # ⚠️ push 触发时 inputs 为空（布尔量变成空字符串 ''）。GH 表达式里 `'' == false`
   # 会被判为 true，所以绝不能用 `== false` 做默认 true 的 fallback（会翻成 false）。
   # 正确做法：用 `== true || == ''` 识别「未设置或显式 true → true」，只有显式 false 才翻 false。
-  TARGET: ${{ matrix.target }}
+  # ⚠️ TARGET 不能放全局 env：全局 env 不支持 matrix 上下文（报 Unrecognized named-value）。
+  #    改为在首个 step 用「矩阵 step 级 env」写入 $GITHUB_ENV（见 Show parameters），
+  #    同时生成 TARGET_SAFE（把 / 换成 -，供 artifact 名 / Release tag 用，Git tag 禁 /）。
   BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
   REF: ${{ inputs.openwrt_ref || '' }}
   USE_APK: ${{ inputs.use_apk == true && 'true' || 'false' }}
@@ -94,8 +96,14 @@ jobs:
         target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","rockchip/armv8"]') }}
     steps:
       - name: Show parameters
+        env:
+          # 矩阵 step 级 env 支持 matrix 上下文（全局 env 不支持）
+          MT: ${{ matrix.target }}
         run: |
-          echo "target        = $TARGET"
+          # 写入 $GITHUB_ENV，供后续步骤的 $TARGET 与 artifact/tag 用的 $TARGET_SAFE 使用
+          echo "TARGET=$MT" >> "$GITHUB_ENV"
+          echo "TARGET_SAFE=${MT//\//-}" >> "$GITHUB_ENV"
+          echo "target        = $MT"
           echo "branch        = $BRANCH  ref=${REF:-<head>}"
           echo "use_apk       = $USE_APK   (false=opkg，与 owai 同格式)"
           echo "standalone    = $STANDALONE (true 才带 kmod)"
@@ -265,7 +273,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: owai-ib-${{ matrix.target }}-${{ github.run_id }}
+          name: owai-ib-${{ env.TARGET_SAFE }}-${{ github.run_id }}
           path: out/
           retention-days: 14
 
@@ -349,10 +357,10 @@ jobs:
         if: ${{ inputs.make_release != false }}
         uses: softprops/action-gh-release@v2
         with:
-          # 用 run_id（每次运行唯一）+ matrix.target 做 tag：
+          # 用 run_id（每次运行唯一）+ TARGET_SAFE 做 tag：
           #   - 三个并行 job 共享同一 run_id，必须带 target 区分，否则会抢同一个 tag；
-          #   - target 形如 mediatek/filogic 含 "/"（非法 tag 字符），用 replace() 改成 "-"。
-          tag_name: ib-${{ inputs.version_number }}-${{ replace(matrix.target, '/', '-') }}-${{ github.run_id }}
+          #   - TARGET_SAFE 已在首个 step 把 "/" 换成 "-"（Git tag 禁 "/"，且 replace() 不是合法 GH 函数）。
+          tag_name: ib-${{ inputs.version_number }}-${{ env.TARGET_SAFE }}-${{ github.run_id }}
           name: OWAI-aligned ImageBuilder ${{ matrix.target }} ${{ inputs.version_number }}
           files: |
             out/*.tar.zst
