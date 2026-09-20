@@ -261,6 +261,26 @@ jobs:
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
 
+      # ⚠️ 生成代差自检：抽出 IB 跑 make info（与 assembler「镜像定义修复」后那步同构）。
+      #    若 IB 内核代与 makefile 脱代（如上游漂到 6.12.109+ 而源树仍 6.12.108），
+      #    这里会报 "Missing kernel version/hash file for 6.12" 并非零退出 → 直接 fail，
+      #    拦在 Upload/Release 之前，避免发布一个 assembler 会致命崩溃的 IB。
+      - name: Self-check IB (make info must not crash)
+        working-directory: openwrt
+        run: |
+          IB=$(ls bin/targets/*/*/*imagebuilder*.tar.zst | head -1)
+          echo "IB=$IB"
+          rm -rf /tmp/ibcheck && mkdir -p /tmp/ibcheck
+          tar -I zstd -xf "$IB" -C /tmp/ibcheck
+          D=$(find /tmp/ibcheck -maxdepth 1 -type d -name '*imagebuilder*' | head -1)
+          echo "IB dir=$D"
+          cd "$D"
+          echo "--- make info (assembler 同构步骤，期望零退出) ---"
+          make info && echo "make info OK (IB 自洽，可安全发布)" || {
+            echo "::error::make info 非零退出 —— IB 与源树内核代脱代，assembler 会致命崩溃，已拦截发布"
+            exit 1
+          }
+
       # ⚠️ 先把产物打包+上传，保证即使后续 Verify/Inspect 失败也能拿到 IB
       - name: Package artifacts
         working-directory: openwrt
