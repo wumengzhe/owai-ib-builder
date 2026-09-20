@@ -202,6 +202,10 @@ jobs:
           {
             echo "CONFIG_TARGET_${BOARD}=y"
             echo "CONFIG_TARGET_${BOARD}_${SUBTARGET}=y"
+            # ⚠️ CONFIG_IB 必须显式置 y：IB_STANDALONE depends on IB，
+            #    而 config IB 的默认值是 BUILDBOT（CI 上未设→n），不写 IB=y
+            #    会让 defconfig 因依赖不满足而静默丢弃 IB_STANDALONE。
+            echo "CONFIG_IB=y"
             echo "CONFIG_SIGNED_PACKAGES=n"
             echo "CONFIG_SIGNATURE_CHECK=n"
             if [ "$USE_APK" = "true" ]; then
@@ -218,7 +222,8 @@ jobs:
           } >> .config
           make defconfig
           echo "--- 生效的关键配置 ---"
-          grep -E '^(CONFIG_USE_APK|CONFIG_IB_STANDALONE|CONFIG_SIGNED_PACKAGES|CONFIG_TARGET_)' .config | head -20
+          grep -E '^(CONFIG_USE_APK|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_SIGNATURE_CHECK|CONFIG_TARGET_)' .config | head -20
+          # ⚠️ 若上面看不到 CONFIG_IB=y 与 CONFIG_IB_STANDALONE=y，说明 defconfig 把它们丢了（依赖不满足），STANDALONE 会失效
 
       - name: Download sources
         working-directory: openwrt
@@ -247,11 +252,15 @@ jobs:
         run: |
           IB=$(ls bin/targets/*/*/*imagebuilder*.tar.zst | head -1)
           echo "IB=$IB"
-          # 数 tarball 内 packages/ 里的 kmod-*.ipk 数量
-          KC=$(tar -tf "$IB" | grep -c 'packages/.*/kmod-')
+          echo "--- tar 内 packages/ 抽样（前 5 条）---"
+          tar -tf "$IB" | grep 'packages/' | head -5 || true
+          # ⚠️ STANDALONE 分支的 $(CP) -t packages/ 是【平铺】拷贝（无 feed 子目录），
+          #    路径形如 <IB>/packages/kmod-xxx.ipk；模式必须同时兼容平铺与嵌套。
+          #    `|| true` 防 bash -e：grep -c 数出 0 时 exit 1 会直接杀掉脚本。
+          KC=$(tar -tf "$IB" | grep -cE 'packages/([^/]*/)?kmod-[^/]*\.ipk$' || true)
           echo "kmod 数量 = $KC  (STANDALONE=$STANDALONE)"
           if [ "$STANDALONE" = "true" ] && [ "$KC" -eq 0 ]; then
-            echo "::error::STANDALONE IB 内未包含任何 kmod！请检查 package/install 是否真的编了包。"
+            echo "::error::STANDALONE IB 内未包含任何 kmod！请检查 .config 是否真的生效了 CONFIG_IB=y + CONFIG_IB_STANDALONE=y。"
             exit 1
           fi
           if [ "$STANDALONE" = "false" ]; then
