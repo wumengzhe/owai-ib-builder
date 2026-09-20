@@ -268,7 +268,7 @@ jobs:
           fi
           echo "kmod 校验完成 ✓"
 
-      - name: Inspect produced IB (verify owai layout)
+      - name: Inspect produced IB (verify layout)
         working-directory: openwrt
         run: |
           IB=$(ls bin/targets/*/*/*imagebuilder*.tar.zst | head -1)
@@ -276,11 +276,22 @@ jobs:
           mkdir -p /tmp/ib
           tar -I zstd -xf "$IB" -C /tmp/ib --wildcards '*/repositories.conf' '*/repositories' 2>/dev/null || true
           D=$(find /tmp/ib -maxdepth 1 -type d -name '*imagebuilder*' | head -1)
-          echo "--- $D/repositories.conf ---"; cat "$D/repositories.conf" 2>/dev/null
-          echo "--- $D/repositories ---";      cat "$D/repositories"      2>/dev/null
+          echo "--- $D/repositories.conf ---"
+          cat "$D/repositories.conf" 2>/dev/null || echo "(无 repositories.conf)"
           echo ""
-          echo "--- 校验 IB 内 repositories.conf 的每个远程源是否 200 ---"
-          python3 - "$D/repositories.conf" <<'PY'
+          echo "--- IB 内 packages/ 统计 ---"
+          TOT=$(tar -tf "$IB" | grep -cE 'packages/([^/]*/)?[^/]*\.ipk$' || true)
+          KMOD=$(tar -tf "$IB" | grep -cE 'packages/([^/]*/)?kmod-[^/]*\.ipk$' || true)
+          echo "总 ipk 数 = $TOT"
+          echo "kmod 数   = $KMOD"
+          PKGMGR=$( [ -f "$D/repositories.conf" ] && echo opkg || echo apk )
+          echo "包管理    = $PKGMGR"
+          echo ""
+          # STANDALONE=true 时 OpenWrt 故意只写本地源（packages 全捆绑），不含远程 owai 源；
+          # 远程 owai 由下游 firmware-assembler 通过 OWAI_BASE_URL 注入。故 200 校验仅在非 standalone 时做。
+          if [ "$STANDALONE" = "false" ]; then
+            echo "--- 校验 repositories.conf 的每个远程源是否 200 ---"
+            python3 - "$D/repositories.conf" <<'PY'
           import sys, urllib.request
           f = sys.argv[1]
           try:
@@ -295,15 +306,20 @@ jobs:
               except Exception as e:
                   print("  %s %s" % (getattr(e,'code',type(e).__name__), u))
           PY
+          else
+            echo "STANDALONE=true：repositories.conf 仅含本地源（packages 已全捆绑），远程 owai 由下游 assembler 注入，跳过 200 校验。"
+          fi
           {
             echo "## IB 产物"
             echo ""
             echo "- 文件: \`$(basename "$IB")\`  ($(du -h "$IB" | cut -f1))"
-            echo "- 包管理: $( [ -f "$D/repositories.conf" ] && echo opkg || echo apk )"
+            echo "- 包管理: $PKGMGR"
+            echo "- STANDALONE: $STANDALONE（true=packages 全本地捆绑，repositories.conf 仅本地源；owai 远程由下游 assembler 注入）"
+            echo "- 总 ipk 数: $TOT   kmod 数: $KMOD"
             echo '```'
-            cat "$D/repositories.conf" 2>/dev/null || cat "$D/repositories" 2>/dev/null
+            cat "$D/repositories.conf" 2>/dev/null || true
             echo '```'
-          } >> $GITHUB_STEP_SUMMARY
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package artifacts
         working-directory: openwrt
