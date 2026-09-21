@@ -85,6 +85,11 @@ env:
   VERSION_REPO: ${{ inputs.version_repo || 'https://dl.openwrt.ai/releases/25.12' }}
   VERSION_NUMBER: ${{ inputs.version_number || '25.12-owai' }}
 
+# ⚠️ 私有仓默认 GITHUB_TOKEN 只有读权限，softprops/action-gh-release 发 Release 会 403
+#    （Resource not accessible by integration）。显式授予 contents:write 才能建 tag+Release。
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -372,16 +377,20 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create release
-        # push 触发时 make_release 输入为空字符串（非默认 true），故用 `!= false`：
-        # 未设置/显式 true → 发 Release；仅显式 false → 不发。
-        if: ${{ inputs.make_release != false }}
+        # ⚠️ 本条件曾写 `inputs.make_release != false`——正是 env 注释里同款坑：
+        #    push 触发时 inputs.* 全为 ''，而 GH 表达式里 `'' == false` 判定为 true
+        #    → `'' != false` 为 false → 本步被静默 skip，Release 从未发布。
+        #    正确姿势（与其他默认 true 布尔量一致）：未设置/显式 true → 发；仅显式 false → 不发。
+        if: ${{ inputs.make_release == true || inputs.make_release == '' || inputs.make_release == null }}
         uses: softprops/action-gh-release@v2
         with:
           # 用 run_id（每次运行唯一）+ TARGET_SAFE 做 tag：
           #   - 三个并行 job 共享同一 run_id，必须带 target 区分，否则会抢同一个 tag；
-          #   - TARGET_SAFE 已在首个 step 把 "/" 换成 "-"（Git tag 禁 "/"，且 replace() 不是合法 GH 函数）。
-          tag_name: ib-${{ inputs.version_number }}-${{ env.TARGET_SAFE }}-${{ github.run_id }}
-          name: OWAI-aligned ImageBuilder ${{ matrix.target }} ${{ inputs.version_number }}
+          #   - TARGET_SAFE 已在首个 step 把 "/" 换成 "-"（Git tag 禁 "/"，且 replace() 不是合法 GH 函数）；
+          #   - VERSION_NUMBER 必须用 env（push 触发时 inputs.version_number 为空，
+          #     env 已回退 '25.12-owai'，否则 tag 会残缺成 ib--mediatek-...）。
+          tag_name: ib-${{ env.VERSION_NUMBER }}-${{ env.TARGET_SAFE }}-${{ github.run_id }}
+          name: OWAI-aligned ImageBuilder ${{ matrix.target }} ${{ env.VERSION_NUMBER }}
           files: |
             out/*.tar.zst
             out/sha256sums
