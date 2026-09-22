@@ -5,7 +5,7 @@
 ## 背景
 - OpenWrt / ImmortalWrt 25.12 默认 **APK**，而 owai 的包是 **opkg**，格式不互通 → 官方/ImmortalWrt 的 25.12 IB 装不进 owai 的包。本工作流**强制 opkg**。
 - **owai 没有可用的远程 kmod**（无 `targets/` 分流，实测 404）。固件要能跑（WiFi / 内核模块）必须有与自身内核匹配的 kmod。因此本 IB 采用 **`CONFIG_IB_STANDALONE=y`**：把全部包（含 kmod）**本地捆绑**进 tarball，`repositories.conf` 只保留本地源 `src imagebuilder file:packages`。
-- **"适配 OWAI 源"= 同代同源**：IB 从 `openwrt-25.12` 编出（与 owai 的 25.12 包同代），包格式、ABI、vermagic 一致。当用户态包需要增量更新时，下游 firmware-assembler 通过 `OWAI_BASE_URL` 把 owai 远程源**注入**到构建中；kmod 始终走本地捆绑（owai 无 kmod）。
+- **"适配 OWAI 源"= 同代同源**：IB 从 `openwrt-25.12` 编出（与 owai 的 25.12 包同代），包格式、ABI、vermagic 一致。STANDALONE IB 自带 kmod（owai 无 kmod）；下游 firmware-assembler 经 `OWAI_REMOTE_INJECT` 决定用户态来源——**默认 `1`（wmz.start 设）强制注入 owai 远程源，全量包可用，与 openwrt.ai 同构**；设 `0` 则纯自含（仅 IB 自带 ~135 包，零远程、无 §1.5b 代差）；`auto`（仅直接起 server 不带变量时回落）按 IB 自动判定。注入的 owai 远程与干净 openwrt-25.12 IB 同代，代差极小（§1.5b 仅告警）。
 
 ## 用法
 仓库 **Actions → `workflow_dispatch`** 触发（push 到 `main` 且改动 `.github/workflows/**` 也会自动跑）。参数见工作流 `inputs`：
