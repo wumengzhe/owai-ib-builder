@@ -46,9 +46,9 @@ on:
         type: boolean
         default: true
       extra_packages:
-        description: 'standalone 时额外要编进 IB 的包（空格分隔），例如 luci-app-ssr-plus'
+        description: 'standalone 时额外要编进 IB 的包（空格分隔）。默认带 luci-app-ssr-plus；要更多 kiddin9 应用（passwall/openclash/vssr…）在此追加，例如 "luci-app-ssr-plus luci-app-passwall luci-app-openclash"'
         required: false
-        default: ''
+        default: 'luci-app-ssr-plus'
       kiddin9_feed:
         description: '挂载 kiddin9/op-packages（owai 那些包就是这个 feed 编出来的）'
         type: boolean
@@ -172,26 +172,34 @@ jobs:
           open(p, "w").write(s)
           print("[version.mk] VERSION_REPO ->", REPO)
 
-          # 2) include/feeds.mk —— 重写 FeedSourcesAppendOPKG：硬编码 owai 五分流，去 core/kmods
+          # 2) include/feeds.mk —— 重写 FeedSourcesAppendOPKG
+          #    STANDALONE=true（自带全包、repositories.conf 仅本地源）→ 写成空 define，
+          #    不追加任何远程源：固件组装无需外联 owai，与 openwrt.ai 同构（单树单代自恰）。
+          #    STANDALONE=false（IB 不含本地包，必须依赖远程）→ 硬编码 owai 五分流，去 core/kmods。
           p = "include/feeds.mk"
           s = open(p).read()
-          new = (
-              "define FeedSourcesAppendOPKG\n"
-              "( \\\n"
-              "  echo 'src/gz %d_base %U/packages/%A/base'; \\\n"
-              "  echo 'src/gz %d_luci %U/packages/%A/luci'; \\\n"
-              "  echo 'src/gz %d_packages %U/packages/%A/packages'; \\\n"
-              "  echo 'src/gz %d_routing %U/packages/%A/routing'; \\\n"
-              "  echo 'src/gz %d_video %U/packages/%A/video'; \\\n"
-              "  echo 'src/gz %d_kiddin9 %U/packages/%A/kiddin9'; \\\n"
-              ") >> $(1)\n"
-              "endef\n"
-          )
+          if os.environ.get("STANDALONE") == "true":
+              new = "define FeedSourcesAppendOPKG\nendef\n"
+              tag = "（STANDALONE 自含：空 define，不追加远程源）"
+          else:
+              new = (
+                  "define FeedSourcesAppendOPKG\n"
+                  "( \\\n"
+                  "  echo 'src/gz %d_base %U/packages/%A/base'; \\\n"
+                  "  echo 'src/gz %d_luci %U/packages/%A/luci'; \\\n"
+                  "  echo 'src/gz %d_packages %U/packages/%A/packages'; \\\n"
+                  "  echo 'src/gz %d_routing %U/packages/%A/routing'; \\\n"
+                  "  echo 'src/gz %d_video %U/packages/%A/video'; \\\n"
+                  "  echo 'src/gz %d_kiddin9 %U/packages/%A/kiddin9'; \\\n"
+                  ") >> $(1)\n"
+                  "endef\n"
+              )
+              tag = "（owai 五分流，去 core/kmods）"
           s, n = re.subn(r"define FeedSourcesAppendOPKG\n.*?\nendef\n", new, s, count=1, flags=re.S)
           if n == 0:
               print("[feeds.mk] !! 未匹配到 FeedSourcesAppendOPKG，请检查 openwrt 源码"); sys.exit(1)
           open(p, "w").write(s)
-          print("[feeds.mk] FeedSourcesAppendOPKG 已重写（owai 五分流，去 core/kmods）")
+          print("[feeds.mk] FeedSourcesAppendOPKG 已重写" + tag)
 
           # 3) target/imagebuilder/Makefile —— 删掉无条件 'option check_signature'
           p = "target/imagebuilder/Makefile"
