@@ -65,9 +65,11 @@ on:
         description: '是否创建 GitHub Release（默认 true：构建后自动发 Release 页面）'
         type: boolean
         default: true
-  push:
-    branches: [main]
-    paths: ['.github/workflows/**']
+  schedule:
+    # 每半个月自动编一次 IB（每月 1 日、15 日 00:00 UTC = 北京 08:00）。
+    # 不挂 push 触发器 —— 日常提交（含本工作流文件自身改动）不会自动跑构建，避免无意义重编。
+    # 需要手动触发时仍用 Actions → workflow_dispatch。
+    - cron: '0 0 1,15 * *'
 
 env:
   # ⚠️ push 触发时 inputs 为空（布尔量变成空字符串 ''）。GH 表达式里 `'' == false`
