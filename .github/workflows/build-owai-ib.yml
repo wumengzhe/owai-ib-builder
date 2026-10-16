@@ -34,9 +34,9 @@ on:
         required: true
         default: 'openwrt-25.12'
       openwrt_ref:
-        description: '精确 commit sha（默认钉在 6.12.108 代 772205402546）。该代与 wmz-lede-multisize 源树内核一致，能让 assembler「镜像定义修复」改写 makefile 时成为 no-op，从而消除 make info 崩溃（kernel version/hash file missing）。留空则回退到 openwrt_branch 头——会随上游内核 bump 漂移并重新与源树脱代，仅用于临时验证，勿用于稳定构建。'
+        description: '精确 commit sha（默认钉在 6.12.108 代 7722054025462cbc4cc6225cfe49ea0ad409b302）。该代与 wmz-lede-multisize 源树内核一致，能让 assembler「镜像定义修复」改写 makefile 时成为 no-op，从而消除 make info 崩溃（kernel version/hash file missing）。⚠️ 必须是完整 40 位 sha——actions/checkout 不认 git 缩写（12 位会被当成分支/标签名去 fetch refs/heads/<短sha> 而失败）。留空则回退到内置钉版。'
         required: false
-        default: '772205402546'
+        default: '7722054025462cbc4cc6225cfe49ea0ad409b302'
       use_apk:
         description: 'true=编 APK 版 IB（默认 false；必须保持 opkg 才能与 owai 互通）'
         type: boolean
@@ -80,9 +80,13 @@ env:
   #    同时生成 TARGET_SAFE（把 / 换成 -，供 artifact 名 / Release tag 用，Git tag 禁 /）。
   BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
   # ⚠️ REF 的 fallback 必须是那个 commit sha，不能是 '' —— schedule 触发时 inputs.* 全为空，
-  #    若此处回落空串，Clone 步的 `inputs.openwrt_ref || inputs.openwrt_branch || 'openwrt-25.12'`
-  #    就会拉分支头（定时构建等于放弃钉版），IB 内核代随上游漂移 → assembler make info 崩溃。
-  REF: ${{ inputs.openwrt_ref || '772205402546' }}
+  #    若此处回落空串，Clone 步就会拉分支头（定时构建等于放弃钉版），IB 内核代随上游漂移
+  #    → assembler make info 崩溃。
+  # ⚠️⚠️ 必须是【完整 40 位】sha，不能用 git 缩写（12 位）！actions/checkout 只把恰好
+  #    40 位十六进制当 commit sha；给 12 位它会当成【分支/标签名】去 fetch
+  #    refs/heads/772205402546* → 不存在 → `The process '/usr/bin/git' failed with exit code 1`
+  #    重试 3 次全失败，Clone 步直接挂（2026-10-16 实测）。
+  REF: ${{ inputs.openwrt_ref || '7722054025462cbc4cc6225cfe49ea0ad409b302' }}
   USE_APK: ${{ inputs.use_apk == true && 'true' || 'false' }}
   STANDALONE: ${{ (inputs.standalone == true || inputs.standalone == '' || inputs.standalone == null) && 'true' || 'false' }}
   EXTRA_PKGS: ${{ inputs.extra_packages || '' }}
@@ -115,10 +119,20 @@ jobs:
           echo "TARGET_SAFE=${MT//\//-}" >> "$GITHUB_ENV"
           echo "target        = $MT"
           echo "branch        = $BRANCH  ref=${REF:-<head>}"
-          # ⚠️ 钉版自检：schedule 触发时 inputs.* 全为空，此处若回落 <head>，
+          # ⚠️ 钉版自检：schedule 触发时 inputs.*全为空，此处若回落 <head>，
           #    IB 内核代会随上游漂移、与 wmz-lede-multisize 源树脱代 → assembler make info 崩溃。
-          if [ "$REF" != "772205402546" ]; then
-            echo "::warning::openwrt_ref=$REF 非默认钉版（772205402546）。若为分支头，请确认内核代仍与 wmz-lede-multisize 源树一致"
+          #    校验用【长度+字符集】而非硬编码字符串：用户合法传入其它 sha（40 位）不该被误报，
+          #    而 git 缩写（12 位）会让 checkout 当分支名去 fetch 而失败，必须在 Clone 前拦下。
+          #    （注：别用 case + 40 个字符类的写法，实测会把合法 40 位 sha 误判为非法——超长
+          #      字符类列表在 shell 里不可靠。用 bash 正则 ^[0-9a-fA-F]{40}$ 最稳。）
+          if [[ "$REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "openwrt_ref = 完整 40 位 sha ✓"
+          elif [ -z "$REF" ]; then
+            echo "::error::openwrt_ref 为空 —— 将回退到 openwrt_branch 头，IB 内核代可能与源树脱代"
+            exit 1
+          else
+            echo "::error::openwrt_ref=$REF 不是完整 40 位 sha（长度 ${#REF}）。actions/checkout 会把它当分支/标签名去 fetch refs/heads/$REF 而失败。请补全为 40 位。"
+            exit 1
           fi
           echo "use_apk       = $USE_APK   (false=opkg，与 owai 同格式)"
           echo "standalone    = $STANDALONE (true 才带 kmod)"
