@@ -79,7 +79,10 @@ env:
   #    改为在首个 step 用「矩阵 step 级 env」写入 $GITHUB_ENV（见 Show parameters），
   #    同时生成 TARGET_SAFE（把 / 换成 -，供 artifact 名 / Release tag 用，Git tag 禁 /）。
   BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
-  REF: ${{ inputs.openwrt_ref || '' }}
+  # ⚠️ REF 的 fallback 必须是那个 commit sha，不能是 '' —— schedule 触发时 inputs.* 全为空，
+  #    若此处回落空串，Clone 步的 `inputs.openwrt_ref || inputs.openwrt_branch || 'openwrt-25.12'`
+  #    就会拉分支头（定时构建等于放弃钉版），IB 内核代随上游漂移 → assembler make info 崩溃。
+  REF: ${{ inputs.openwrt_ref || '772205402546' }}
   USE_APK: ${{ inputs.use_apk == true && 'true' || 'false' }}
   STANDALONE: ${{ (inputs.standalone == true || inputs.standalone == '' || inputs.standalone == null) && 'true' || 'false' }}
   EXTRA_PKGS: ${{ inputs.extra_packages || '' }}
@@ -112,6 +115,11 @@ jobs:
           echo "TARGET_SAFE=${MT//\//-}" >> "$GITHUB_ENV"
           echo "target        = $MT"
           echo "branch        = $BRANCH  ref=${REF:-<head>}"
+          # ⚠️ 钉版自检：schedule 触发时 inputs.* 全为空，此处若回落 <head>，
+          #    IB 内核代会随上游漂移、与 wmz-lede-multisize 源树脱代 → assembler make info 崩溃。
+          if [ "$REF" != "772205402546" ]; then
+            echo "::warning::openwrt_ref=$REF 非默认钉版（772205402546）。若为分支头，请确认内核代仍与 wmz-lede-multisize 源树一致"
+          fi
           echo "use_apk       = $USE_APK   (false=opkg，与 owai 同格式)"
           echo "standalone    = $STANDALONE (true 才带 kmod)"
           echo "kiddin9 feed  = $KIDDIN9_FEED"
@@ -135,7 +143,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openwrt/openwrt
-          ref: ${{ inputs.openwrt_ref || inputs.openwrt_branch || 'openwrt-25.12' }}
+          ref: ${{ env.REF }}
           fetch-depth: 1
           path: openwrt
 
@@ -175,28 +183,43 @@ jobs:
           print("[version.mk] VERSION_REPO ->", REPO)
 
           # 2) include/feeds.mk —— 重写 FeedSourcesAppendOPKG
-          #    STANDALONE=true（自带全包、repositories.conf 仅本地源）→ 写成空 define，
-          #    不追加任何远程源：固件组装无需外联 owai，与 openwrt.ai 同构（单树单代自恰）。
-          #    STANDALONE=false（IB 不含本地包，必须依赖远程）→ 硬编码 owai 五分流，去 core/kmods。
+          #
+          #    ⚠️⚠️ 这里改的是【固件的 /etc/opkg/distfeeds.conf】，不是 IB 的 repositories.conf
+          #    （后者由 target/imagebuilder/Makefile 按 CONFIG_IB_STANDALONE 自动生成）。
+          #    distfeeds.conf 是刷进设备后的**真下载源** —— firmware-assembler 的品牌残留审计
+          #    把它列为"② 刻意不动：动了会废掉装包"。所以**任何情况下都不能让它为空**。
+          #
+          #    ⚠️⚠️ 曾踩的坑（run 38677412301 三平台全挂 1h36m）：本补丁原先在
+          #    STANDALONE=true 时把 define 写成**空**，而 package/base-files/Makefile
+          #    install 段是无条件三段拼接：
+          #      mkdir -p $(1)/etc/opkg; \
+          #      $(call FeedSourcesAppendOPKG); \
+          #      $(VERSION_SED_SCRIPT) $(1)/etc/opkg/distfeeds.conf
+          #    OpenWrt 把反斜杠续行拼成【单行】交给 bash -c，空 define 留下 `; ;`
+          #    → `bash: -c: line 1: syntax error near unexpected token ';'` (Error 2)
+          #    → base-files 编译失败 → package/compile Error 2 → 整个 job 挂。
+          #    （注：用 ";" 占位同样炸，会变成 "; ;; "。唯一空命令占位是 ":"。）
+          #
+          #    现在 STANDALONE / 非 STANDALONE **都写 owai 五分流**，因为二者要的东西不同：
+          #      · IB 的 repositories.conf = 纯本地自含（IB_STANDALONE 管的）→ assembler
+          #        的 OWAI_REMOTE_INJECT=auto 判定为"自含"→ 不注入第二份远程源 → 无混源代差。
+          #      · 固件的 distfeeds.conf    = owai 远程源（这里管的）→ 刷出来的机器能装包。
+          #    两个源各司其职，不再互相打架。
           p = "include/feeds.mk"
           s = open(p).read()
-          if os.environ.get("STANDALONE") == "true":
-              new = "define FeedSourcesAppendOPKG\nendef\n"
-              tag = "（STANDALONE 自含：空 define，不追加远程源）"
-          else:
-              new = (
-                  "define FeedSourcesAppendOPKG\n"
-                  "( \\\n"
-                  "  echo 'src/gz %d_base %U/packages/%A/base'; \\\n"
-                  "  echo 'src/gz %d_luci %U/packages/%A/luci'; \\\n"
-                  "  echo 'src/gz %d_packages %U/packages/%A/packages'; \\\n"
-                  "  echo 'src/gz %d_routing %U/packages/%A/routing'; \\\n"
-                  "  echo 'src/gz %d_video %U/packages/%A/video'; \\\n"
-                  "  echo 'src/gz %d_kiddin9 %U/packages/%A/kiddin9'; \\\n"
-                  ") >> $(1)\n"
-                  "endef\n"
-              )
-              tag = "（owai 五分流，去 core/kmods）"
+          new = (
+              "define FeedSourcesAppendOPKG\n"
+              "( \\\n"
+              "  echo 'src/gz %d_base %U/packages/%A/base'; \\\n"
+              "  echo 'src/gz %d_luci %U/packages/%A/luci'; \\\n"
+              "  echo 'src/gz %d_packages %U/packages/%A/packages'; \\\n"
+              "  echo 'src/gz %d_routing %U/packages/%A/routing'; \\\n"
+              "  echo 'src/gz %d_video %U/packages/%A/video'; \\\n"
+              "  echo 'src/gz %d_kiddin9 %U/packages/%A/kiddin9'; \\\n"
+              ") >> $(1)\n"
+              "endef\n"
+          )
+          tag = "（owai 五分流，去 core/kmods；STANDALONE 与否同此，因固件必须有下载源）"
           s, n = re.subn(r"define FeedSourcesAppendOPKG\n.*?\nendef\n", new, s, count=1, flags=re.S)
           if n == 0:
               print("[feeds.mk] !! 未匹配到 FeedSourcesAppendOPKG，请检查 openwrt 源码"); sys.exit(1)
