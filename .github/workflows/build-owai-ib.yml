@@ -272,6 +272,18 @@ jobs:
             #    而 config IB 的默认值是 BUILDBOT（CI 上未设→n），不写 IB=y
             #    会让 defconfig 因依赖不满足而静默丢弃 IB_STANDALONE。
             echo "CONFIG_IB=y"
+            # ⚠️⚠️ ALL_KMODS 是「自编 IB + 外挂 owai 远程源」架构的**必需项**（参考 Kwrt 实锤）：
+            #   dl.openwrt.ai 四个 feed（kiddin9/base/packages/luci 共 9905 包）实测
+            #   **kmod-* 数量 = 0、libc/kernel/base-files = 0**，即远程源是纯 userspace。
+            #   但 kiddin9 有 128 个包的 Depends 引用 kmod-*（kmod-tun 41 次、
+            #   kmod-usb-serial-option 24、kmod-nft-tproxy 14…），这些只能由 IB 本地出。
+            #   不开 ALL_KMODS → IB 只含被选包依赖链上的 kmod → opkg "Unknown package"
+            #   → assembler §4 静默剔除 → 插件不进固件（2026-10-02 实锤过的故障模式）。
+            #   Kwrt 的 IB 内 .config 实锤：CONFIG_ALL_KMODS=y → 1418 ipk 含 985 个 kmod。
+            echo "CONFIG_ALL_KMODS=y"
+            # PER_FEED_REPO：与 owai 的分流布局（base/luci/packages/routing/video/kiddin9）
+            # 对齐，Kwrt 亦为 y。影响 bin/packages 的子目录组织。
+            echo "CONFIG_PER_FEED_REPO=y"
             echo "CONFIG_SIGNED_PACKAGES=n"
             echo "CONFIG_SIGNATURE_CHECK=n"
             if [ "$USE_APK" = "true" ]; then
@@ -312,6 +324,68 @@ jobs:
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
+
+      # ⚠️ kmod 覆盖自检（对应「自编 IB + 外挂 owai 远程源」架构的必需前提）
+      #   owai 远程源实测为纯 userspace（kmod-* = 0），但有 128 个包的 Depends 引用
+      #   kmod-*。这些 kmod 必须由 IB 本地提供，否则 assembler 装包时报
+      #   "Unknown package" → §4 静默剔除 → 插件不进固件。
+      #   本步在发布前核对：owai 依赖的 kmod ∩ IB 本地 packages/ 的缺失集。
+      #   缺失 = 真问题（该插件装不上），必须 fail 拦下，别等用户刷完才发现。
+      - name: Self-check IB (kmod coverage vs owai remote)
+        working-directory: openwrt
+        run: |
+          IB=$(ls bin/targets/*/*/*imagebuilder*.tar.zst | head -1)
+          echo "IB=$IB"
+          rm -rf /tmp/ibkmod && mkdir -p /tmp/ibkmod
+          tar -I zstd -xf "$IB" -C /tmp/ibkmod
+          D=$(find /tmp/ibkmod -maxdepth 1 -type d -name '*imagebuilder*' | head -1)
+          echo "IB dir=$D"
+
+          # IB 本地已编的 kmod 名集合（去掉 _版本 后缀；统一 LC_ALL=C 保证排序一致）
+          find "$D/packages" -name 'kmod-*.ipk' -printf '%f\n' 2>/dev/null \
+            | sed -E 's/_[0-9].*//' | LC_ALL=C sort -u > /tmp/ib_kmods.txt
+          echo "IB 本地 kmod 数 = $(wc -l < /tmp/ib_kmods.txt)"
+
+          # 抓 owai kiddin9 索引，提取所有 kmod-* 依赖。
+          # ARCH 从 IB 目录名推导（IB 名形如 xxx-imagebuilder-mediatek-filogic.Linux-x86_64，
+          # 不含 arch），改从 packages/ 里任一 kmod ipk 的文件名提取 arch 后缀。
+          ARCH=$(find "$D/packages" -name 'kmod-*_*_*.ipk' -printf '%f\n' 2>/dev/null | head -1 \
+                  | awk -F'_' '{print $(NF-1)}')
+          echo "arch = $ARCH"
+          if [ -z "$ARCH" ]; then
+            echo "::warning::无法从 IB 推导 arch，跳过 kmod 覆盖自检"
+            exit 0
+          fi
+          curl -sSL -m 120 -o /tmp/kiddin9.gz \
+            "https://dl.openwrt.ai/releases/25.12/packages/${ARCH}/kiddin9/Packages.gz" || {
+            echo "::warning::抓不到 owai kiddin9 索引，跳过 kmod 覆盖自检（网络问题，非构建问题）"
+            exit 0
+          }
+          # 提取 Depends 中的 kmod-*（去版本号）
+          zcat /tmp/kiddin9.gz 2>/dev/null | grep -E '^Depends:' \
+            | grep -oE 'kmod-[a-z0-9][a-z0-9-]*' | LC_ALL=C sort -u > /tmp/owai_kmods.txt
+          echo "owai 依赖的 kmod 种数 = $(wc -l < /tmp/owai_kmods.txt)"
+
+          # 差集 = 缺失。
+          # ⚠️ 必须用 grep -Fxf 求交集再 comm，**不能直接 comm -23 owai ib**：
+          #   实测 comm 在两边排序规则/locale 不一致时会把已存在的条目误报为缺失
+          #   （本次实测：直接 comm 报 94 个缺失，实际只缺 6 个，88 个是假象）。
+          #   正确做法：先 grep -Fxf 求交集（逐行精确匹配，不受排序影响），再求差。
+          grep -Fxf /tmp/owai_kmods.txt /tmp/ib_kmods.txt | LC_ALL=C sort -u > /tmp/both_kmods.txt
+          LC_ALL=C sort -u /tmp/owai_kmods.txt > /tmp/o_sorted.txt
+          LC_ALL=C sort -u /tmp/ib_kmods.txt  > /tmp/i_sorted.txt
+          comm -23 /tmp/o_sorted.txt /tmp/both_kmods.txt > /tmp/missing_kmods.txt || true
+          MISS=$(wc -l < /tmp/missing_kmods.txt)
+          echo "--- 缺失 kmod（owai 需要但 IB 没有），交集 $(wc -l < /tmp/both_kmods.txt) / owai $(wc -l < /tmp/o_sorted.txt) ---"
+          if [ "$MISS" -eq 0 ]; then
+            echo "无 ✓ kmod 全覆盖"
+          else
+            cat /tmp/missing_kmods.txt
+            echo "缺失合计 = $MISS"
+            # 只 warning 不 fail：这些 kmod 可能该 target 本就不支持（如 kmod-xdpi 需新内核），
+            # 由 assembler 的 §4 剔除即可；但必须显式点名，避免静默丢失插件。
+            echo "::warning::owai 依赖 $MISS 个 kmod 在 IB 本地缺失，依赖它们的插件将被 assembler 剔除（见上）"
+          fi
 
       # ⚠️ 生成代差自检：抽出 IB 跑 make info（与 assembler「镜像定义修复」后那步同构）。
       #    若 IB 内核代与 makefile 脱代（如上游漂到 6.12.109+ 而源树仍 6.12.108），
