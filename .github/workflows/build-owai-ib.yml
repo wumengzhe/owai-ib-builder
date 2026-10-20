@@ -407,24 +407,43 @@ jobs:
           echo "IB 本地 kmod 数 = $(wc -l < /tmp/ib_kmods.txt)"
 
           # 抓 owai kiddin9 索引，提取所有 kmod-* 依赖。
-          # ARCH 从 IB 目录名推导（IB 名形如 xxx-imagebuilder-mediatek-filogic.Linux-x86_64，
-          # 不含 arch），改从 packages/ 里任一 kmod ipk 的文件名提取 arch 后缀。
-          ARCH=$(find "$D/packages" -name 'kmod-*_*_*.ipk' -printf '%f\n' 2>/dev/null | head -1 \
-                  | awk -F'_' '{print $(NF-1)}')
+          # ⚠️⚠️ 2026-10-21 实锤的假通过 bug（run 39454332271 自检报 0/0 全覆盖，实为缺失 4 个）：
+          #   原写法从 ipk 文件名猜 arch（awk -F'_' $(NF-1) / 尾两段），而
+          #   kmod-3c59x_6.12.108-r1_aarch64_cortex-a53.ipk 的 arch 是两段
+          #   （aarch64_cortex-a53）且前面还有 version 段，两种猜法都取错
+          #   → URL 404 → dl.openwrt.ai 对坏路径返回 HTTP 200 的 HTML 错误页
+          #   → curl -f 不拦 → zcat 静默失败（2>/dev/null 吞错）→ 0/0 假全覆盖。
+          #   正解：IB 的 staging_dir/target-<arch>_musl 目录名是权威 arch 来源
+          #   （实测 staging_dir/target-aarch64_cortex-a53_musl → aarch64_cortex-a53）。
+          #   另加双保险：curl 后强制 gzip 魔术头校验 + owai kmod 数下限断言（历史 94~95）。
+          #   ③ kmod 名正则允许下划线（kmod-sprd_pcie 曾因正则不含 _ 被截成 kmod-sprd 造成假缺失）。
+          ARCH=$(ls -d "$D"/staging_dir/target-*_musl 2>/dev/null | head -1 \
+                  | sed 's|.*/target-||; s|_musl$||')
           echo "arch = $ARCH"
           if [ -z "$ARCH" ]; then
-            echo "::warning::无法从 IB 推导 arch，跳过 kmod 覆盖自检"
-            exit 0
+            echo "::error::无法从 staging_dir 推导 arch，kmod 覆盖自检无法进行"
+            exit 1
           fi
           curl -sSL -m 120 -o /tmp/kiddin9.gz \
             "https://dl.openwrt.ai/releases/25.12/packages/${ARCH}/kiddin9/Packages.gz" || {
-            echo "::warning::抓不到 owai kiddin9 索引，跳过 kmod 覆盖自检（网络问题，非构建问题）"
-            exit 0
+            echo "::error::抓不到 owai kiddin9 索引（网络问题）——kmod 覆盖自检必须实测通过才准发布，不静默跳过"
+            exit 1
           }
-          # 提取 Depends 中的 kmod-*（去版本号）
+          # gzip 魔术头校验（\x1f\x8b）：拦下 404 HTML 页等非 gzip 响应，防止 zcat 静默产出 0 行
+          MAGIC=$(head -c2 /tmp/kiddin9.gz | od -An -tx1 | tr -d ' \n')
+          if [ "$MAGIC" != "1f8b" ]; then
+            echo "::error::owai kiddin9 索引不是 gzip（magic=$MAGIC，URL=${ARCH}/kiddin9/Packages.gz）——抓错了，拒绝静默通过"
+            exit 1
+          fi
+          # 提取 Depends 中的 kmod-*（去版本号；正则允许下划线，如 kmod-sprd_pcie）
           zcat /tmp/kiddin9.gz 2>/dev/null | grep -E '^Depends:' \
-            | grep -oE 'kmod-[a-z0-9][a-z0-9-]*' | LC_ALL=C sort -u > /tmp/owai_kmods.txt
-          echo "owai 依赖的 kmod 种数 = $(wc -l < /tmp/owai_kmods.txt)"
+            | grep -oE 'kmod-[a-z0-9][a-z0-9_-]*' | LC_ALL=C sort -u > /tmp/owai_kmods.txt
+          OWAI_N=$(wc -l < /tmp/owai_kmods.txt)
+          echo "owai 依赖的 kmod 种数 = $OWAI_N"
+          if [ "$OWAI_N" -lt 50 ]; then
+            echo "::error::owai kmod 依赖只提取到 $OWAI_N 种（历史值 94~95）——索引解析异常，拒绝发布"
+            exit 1
+          fi
 
           # 差集 = 缺失。
           # ⚠️ 必须用 grep -Fxf 求交集再 comm，**不能直接 comm -23 owai ib**：
