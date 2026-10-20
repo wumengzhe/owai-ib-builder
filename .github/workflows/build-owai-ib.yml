@@ -46,9 +46,9 @@ on:
         type: boolean
         default: true
       extra_packages:
-        description: 'standalone 时额外要编进 IB 的包（空格分隔）。默认带 luci-app-ssr-plus；要更多 kiddin9 应用（passwall/openclash/vssr…）在此追加，例如 "luci-app-ssr-plus luci-app-passwall luci-app-openclash"'
+        description: 'standalone 时额外要编进 IB 的包（空格分隔）。默认空——userland 插件应由 assembler 从 owai 远程源拉（架构本意：IB 只管 kmod+base）。⚠️ 若传 luci-app-ssr-plus/passwall/openclash 等会强拉 dnsmasq-full 的包，Generate .config 的 variant 互斥段会自动关普通 dnsmasq（见该步注释）。要更多 kiddin9 应用在此追加，例如 "luci-app-ssr-plus luci-app-passwall luci-app-openclash"'
         required: false
-        default: 'luci-app-ssr-plus'
+        default: ''
       kiddin9_feed:
         description: '挂载 kiddin9/op-packages（owai 那些包就是这个 feed 编出来的）'
         type: boolean
@@ -334,8 +334,33 @@ jobs:
             fi
           } >> .config
           make defconfig
+          # ⚠️⚠️ post-defconfig：dnsmasq variant 互斥（2026-10-20 run 39413072738 实锤）：
+          #   dnsmasq 包有三个 variant（package/network/services/dnsmasq/Makefile）：
+          #     dnsmasq（nodhcpv6，DEFAULT_VARIANT）/ dnsmasq-dhcpv6 / dnsmasq-full
+          #   三者都 PROVIDES:=dnsmasq 且装同一批文件（/etc/init.d/dnsmasq、
+          #   /usr/sbin/dnsmasq、/etc/dnsmasq.conf 等 10 个）。
+          #   EXTRA_PKGS 带 luci-app-ssr-plus（kiddin9 feed LUCI_DEPENDS L33 实锤
+          #   含 +dnsmasq-full；passwall/openclash 同理）→ dnsmasq-full=y；
+          #   而 filogic 默认配置链同时有 dnsmasq=y → package/install 阶段 opkg 报：
+          #     check_data_file_clashes: dnsmasq-full wants to install .../etc/init.d/dnsmasq
+          #     But that file is already provided by package * dnsmasq
+          #     opkg_install_cmd: Cannot install package dnsmasq-full / luci-app-ssr-plus
+          #     make[1]: *** [package/Makefile:100: package/install] Error 255 → 整盘失败。
+          #   （该 run 编译 2h49m 全过——kmod 编译层已全绿——纯倒在 install 配置问题。）
+          #   修法：full 是超集（DNSSEC/DHCPv6/ipset/nftset 全开）且 PROVIDES dnsmasq，
+          #   opkg 依赖层无感 → 关普通 variant 保 full，与官方 menuconfig 选 full 的行为一致。
+          #   仅在 full 被选时才关（EXTRA_PKGS 为空时默认配置只有普通 dnsmasq，不能动）。
+          if grep -q "^CONFIG_PACKAGE_dnsmasq-full=y" .config; then
+            echo "# CONFIG_PACKAGE_dnsmasq is not set" >> .config
+            echo "# CONFIG_PACKAGE_dnsmasq-dhcpv6 is not set" >> .config
+            make defconfig
+            if grep -q "^CONFIG_PACKAGE_dnsmasq=y" .config; then
+              echo "::error::dnsmasq 被其他包强选无法关闭——EXTRA_PKGS 与默认配置 variant 冲突，请从 extra_packages 移除会强拉 dnsmasq-full 的包"; exit 1
+            fi
+            echo "dnsmasq variant 互斥已处理：full=y，普通/dhcpv6 已关"
+          fi
           echo "--- 生效的关键配置 ---"
-          grep -E '^(CONFIG_USE_APK|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_SIGNATURE_CHECK|CONFIG_ALL_KMODS|CONFIG_KERNEL_WERROR|CONFIG_TARGET_)' .config | head -20
+          grep -E '^(CONFIG_USE_APK|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_SIGNATURE_CHECK|CONFIG_ALL_KMODS|CONFIG_KERNEL_WERROR|CONFIG_TARGET_|CONFIG_PACKAGE_dnsmasq)' .config | head -20
           # ⚠️ 若上面看不到 CONFIG_IB=y 与 CONFIG_IB_STANDALONE=y，说明 defconfig 把它们丢了（依赖不满足），STANDALONE 会失效
 
       - name: Download sources
