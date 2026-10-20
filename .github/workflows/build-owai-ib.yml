@@ -259,6 +259,27 @@ jobs:
           # op-packages 根目录带 luci-base/luci-mod-*/luci-nginx 等 core 组件，
           # 一把梭会把整棵 LuCI 换掉。这里只做普通全装。
           ./scripts/feeds install -a
+          # ⚠️⚠️ shortcut-fe 必须删（2026-10-20 run 39395657799 实锤，1h40m56s 后挂）：
+          #   ALL_KMODS 把 kiddin9 feed 的 vendored 内核包全扫进来编译，本批共 12 个：
+          #   gpio-button-hotplug / leds-gca230718 / leds-ws2812b / mdio-netlink / mtd-rw /
+          #   netatop / pcie_mhi / rkp-ipid / siit / tcp-brutal / trelay / ubootenv-nvram
+          #   前 11 个全部编过（symvers 齐全），唯独 shortcut-fe 死在真·编译错误上：
+          #     sfe_ipv4.c:1478:12: error: 'struct sk_buff' has no member named 'fast_forwarded'
+          #     sfe_ipv4.c:2051:12: error: 'struct sk_buff' has no member named 'fast_forwarded'
+          #   sk_buff->fast_forwarded 在 Linux 5.13 被移除，SFE 源码多年未跟上，
+          #   这不是警告类问题——CONFIG_KERNEL_WERROR=n 也救不了，只能删或大改源码。
+          #   ✅ 删除零成本（与 quectel_MHI 完全相反——那条有用户态包
+          #   "Depends: libc, kmod-pcie_mhi, pciutils, quectel-cm" 不能删）：
+          #     dl.openwrt.ai 25.12 kiddin9 索引 1131 包实测：shortcut-fe = 0 个、
+          #     无任何包 Depends shortcut-fe。owai 的 packages-compile custom.sh
+          #     本来就删光所有纯 KernelPackage，官方索引里从来没有它 —— 删掉只是
+          #     与 owai 官方行为对齐，不影响任何用户态包安装。
+          #   注意 uninstall 只删 package/ 下的 symlink，feeds/ 源目录要单独 rm。
+          rm -rf package/kiddin9/shortcut-fe feeds/kiddin9/shortcut-fe
+          if [ -e package/kiddin9/shortcut-fe ] || [ -L package/kiddin9/shortcut-fe ] || [ -e feeds/kiddin9/shortcut-fe ]; then
+            echo "!! shortcut-fe 仍存在，删除失败"; exit 1
+          fi
+          echo "shortcut-fe 已删除 OK"
 
       - name: Generate .config
         working-directory: openwrt
