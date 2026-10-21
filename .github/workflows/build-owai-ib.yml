@@ -251,6 +251,36 @@ jobs:
           else:
               open(p, "w").write(s2)
               print("[imagebuilder/Makefile] 已删除 option check_signature (n=%d)" % n)
+
+          # 4) target/imagebuilder/Makefile —— STANDALONE 补拷 bin/targets 下的 target 专属包
+          #    2026-10-21 build (3).log 实锤：官方 STANDALONE 分支只
+          #    `$(FIND) $(wildcard $(PACKAGE_SUBDIRS)) ... cp`，而 base-files/libc/kernel/
+          #    uci/netifd/firewall4/dnsmasq-full 等 target 专属包全部打在
+          #    bin/targets/<t>/<s>/packages/（CI 日志实锤 base-files 打包进该目录），
+          #    不在 PACKAGE_SUBDIRS → 没进 IB → 组装 opkg "Unknown package" 全线崩
+          #    （firewall4 缺 iptables 依赖、kmod-shortcut-fe 缺失级联）。
+          #    Kwrt IB 1418 包全自带（他们自建打包流程），owai 远程源无这些核心包
+          #    （六分流实测 kernel/kmod/libc/base-files=0，firewall4/iptables 也没有）
+          #    → IB 本地必须出，补拷是唯一正解。
+          p = "target/imagebuilder/Makefile"
+          s = open(p).read()
+          anchor = ("\t$(FIND) $(wildcard $(PACKAGE_SUBDIRS)) -type f -name '*.$(PACKAGE_SUFFIX)' \\\n"
+                    "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n"
+                    "endif")
+          inject = ("\t$(FIND) $(wildcard $(PACKAGE_SUBDIRS)) -type f -name '*.$(PACKAGE_SUFFIX)' \\\n"
+                    "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n"
+                    "\t# wmz 补丁 2026-10-21: PACKAGE_SUBDIRS 不含 bin/targets/<t>/<s>/packages,\n"
+                    "\t# 而 target 专属包(base-files/libc/kernel/firewall4/uci/netifd/dnsmasq-full...)\n"
+                    "\t# 全打在那里; STANDALONE 必须一并拷入, 否则 IB 缺核心用户态链(组装 opkg Unknown)。\n"
+                    "\t$(FIND) $(TOPDIR)/bin/targets -type f -name '*.$(PACKAGE_SUFFIX)' \\\n"
+                    "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n"
+                    "endif")
+          if anchor in s:
+              s = s.replace(anchor, inject, 1)
+              open(p, "w").write(s)
+              print("[imagebuilder/Makefile] STANDALONE 补拷 bin/targets 已注入")
+          else:
+              print("[imagebuilder/Makefile] !! 未匹配 STANDALONE FIND 锚点，请检查 openwrt 源码"); sys.exit(1)
           PY
 
       - name: Update and install feeds
@@ -261,27 +291,23 @@ jobs:
           # op-packages 根目录带 luci-base/luci-mod-*/luci-nginx 等 core 组件，
           # 一把梭会把整棵 LuCI 换掉。这里只做普通全装。
           ./scripts/feeds install -a
-          # ⚠️⚠️ shortcut-fe 必须删（2026-10-20 run 39395657799 实锤，1h40m56s 后挂）：
-          #   ALL_KMODS 把 kiddin9 feed 的 vendored 内核包全扫进来编译，本批共 12 个：
-          #   gpio-button-hotplug / leds-gca230718 / leds-ws2812b / mdio-netlink / mtd-rw /
-          #   netatop / pcie_mhi / rkp-ipid / siit / tcp-brutal / trelay / ubootenv-nvram
-          #   前 11 个全部编过（symvers 齐全），唯独 shortcut-fe 死在真·编译错误上：
-          #     sfe_ipv4.c:1478:12: error: 'struct sk_buff' has no member named 'fast_forwarded'
-          #     sfe_ipv4.c:2051:12: error: 'struct sk_buff' has no member named 'fast_forwarded'
-          #   sk_buff->fast_forwarded 在 Linux 5.13 被移除，SFE 源码多年未跟上，
-          #   这不是警告类问题——CONFIG_KERNEL_WERROR=n 也救不了，只能删或大改源码。
-          #   ✅ 删除零成本（与 quectel_MHI 完全相反——那条有用户态包
-          #   "Depends: libc, kmod-pcie_mhi, pciutils, quectel-cm" 不能删）：
-          #     dl.openwrt.ai 25.12 kiddin9 索引 1131 包实测：shortcut-fe = 0 个、
-          #     无任何包 Depends shortcut-fe。owai 的 packages-compile custom.sh
-          #     本来就删光所有纯 KernelPackage，官方索引里从来没有它 —— 删掉只是
-          #     与 owai 官方行为对齐，不影响任何用户态包安装。
-          #   注意 uninstall 只删 package/ 下的 symlink，feeds/ 源目录要单独 rm。
-          rm -rf package/kiddin9/shortcut-fe feeds/kiddin9/shortcut-fe
-          if [ -e package/kiddin9/shortcut-fe ] || [ -L package/kiddin9/shortcut-fe ] || [ -e feeds/kiddin9/shortcut-fe ]; then
-            echo "!! shortcut-fe 仍存在，删除失败"; exit 1
+          # ⚠️⚠️ shortcut-fe 打 API 兼容补丁【保留包】（2026-10-21 从"删包"改为打补丁）：
+          #   历史：run 39395657799（2026-10-20）实锤 shortcut-fe 在 6.12 编不过——
+          #     sfe_ipv4.c:1478/2051: error: 'struct sk_buff' has no member named 'fast_forwarded'
+          #     sk_buff->fast_forwarded 在 Linux 5.13 被移除（net: remove skb->fast_forwarded），
+          #     SFE 源码多年未跟上——真·编译错误，KERNEL_WERROR=n 救不了。当时选择删包。
+          #   改因（2026-10-21 build (3).log 实锤）：删包把 filogic 组装链炸了——
+          #     kmod-shortcut-fe 是 assembler data/platform_packages.json 的平台必备
+          #     （MTK HWNAT 硬件转发加速基石），Kwrt IB 自带、owai 远程源没有（纯 userspace）
+          #     → IB 必须本地出。删了它组装必报 Unknown package，连带 firewall4 级联失败。
+          #   修法：源码是 in-tree（feeds/kiddin9/shortcut-fe/shortcut-fe/src/*.c），
+          #     直接删 fast_forwarded 赋值行。该字段仅作 netfilter"已快速转发"统计提示，
+          #     删除不影响 SFE 转发核心（Qualcomm 官方在 5.13 后也是直接删的）。
+          sed -i '/skb->fast_forwarded/d' feeds/kiddin9/shortcut-fe/shortcut-fe/src/*.c
+          if grep -rq "fast_forwarded" feeds/kiddin9/shortcut-fe/shortcut-fe/src/; then
+            echo "!! shortcut-fe 补丁未清净（src 仍有 fast_forwarded）"; exit 1
           fi
-          echo "shortcut-fe 已删除 OK"
+          echo "shortcut-fe fast_forwarded 兼容补丁已打（sfe_ipv4/ipv6/cm 全覆盖），包保留"
 
       - name: Generate .config
         working-directory: openwrt
