@@ -26,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: '要编译的 target 列表（JSON 数组）；默认三平台。只编某个就改这里'
+        description: '要编译的 target 列表（JSON 数组）；默认四平台（filogic/ipq807x/ipq60xx/armv8，ipq60xx 于 2026-10-21 新增）。只编某个就改这里'
         required: false
-        default: '["mediatek/filogic","qualcommax/ipq807x","rockchip/armv8"]'
+        default: '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]'
       openwrt_branch:
         description: 'openwrt/openwrt 分支'
         required: true
@@ -106,8 +106,10 @@ jobs:
       # 三平台并行；fail-fast:false 让单个 target 失败不拖垮其余两个
       fail-fast: false
       matrix:
-        # push 触发时 inputs.targets 为空 → 回退到默认三平台 JSON 数组
-        target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","rockchip/armv8"]') }}
+        # push 触发时 inputs.targets 为空 → 回退到默认四平台 JSON 数组
+        # （ipq60xx 于 2026-10-21 新增：qualcommax subtarget 在 7722054025 实测存在，
+        #  与 ipq807x 同 target 不同 subtarget，KERNEL_WERROR/variant 互斥等修复通用）
+        target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]') }}
     steps:
       - name: Show parameters
         env:
