@@ -291,23 +291,27 @@ jobs:
           # op-packages 根目录带 luci-base/luci-mod-*/luci-nginx 等 core 组件，
           # 一把梭会把整棵 LuCI 换掉。这里只做普通全装。
           ./scripts/feeds install -a
-          # ⚠️⚠️ shortcut-fe 打 API 兼容补丁【保留包】（2026-10-21 从"删包"改为打补丁）：
-          #   历史：run 39395657799（2026-10-20）实锤 shortcut-fe 在 6.12 编不过——
-          #     sfe_ipv4.c:1478/2051: error: 'struct sk_buff' has no member named 'fast_forwarded'
-          #     sk_buff->fast_forwarded 在 Linux 5.13 被移除（net: remove skb->fast_forwarded），
-          #     SFE 源码多年未跟上——真·编译错误，KERNEL_WERROR=n 救不了。当时选择删包。
-          #   改因（2026-10-21 build (3).log 实锤）：删包把 filogic 组装链炸了——
-          #     kmod-shortcut-fe 是 assembler data/platform_packages.json 的平台必备
-          #     （MTK HWNAT 硬件转发加速基石），Kwrt IB 自带、owai 远程源没有（纯 userspace）
-          #     → IB 必须本地出。删了它组装必报 Unknown package，连带 firewall4 级联失败。
-          #   修法：源码是 in-tree（feeds/kiddin9/shortcut-fe/shortcut-fe/src/*.c），
-          #     直接删 fast_forwarded 赋值行。该字段仅作 netfilter"已快速转发"统计提示，
-          #     删除不影响 SFE 转发核心（Qualcomm 官方在 5.13 后也是直接删的）。
-          sed -i '/skb->fast_forwarded/d' feeds/kiddin9/shortcut-fe/shortcut-fe/src/*.c
-          if grep -rq "fast_forwarded" feeds/kiddin9/shortcut-fe/shortcut-fe/src/; then
-            echo "!! shortcut-fe 补丁未清净（src 仍有 fast_forwarded）"; exit 1
+          # ⚠️⚠️ shortcut-fe 必须删（2026-10-21 两度实证，SFE 与 6.12 深度不兼容）：
+          #   第一次（942d46c 之前的 c67b916）删包，理由是 fast_forwarded 编不过——正确但不完整。
+          #   第二次（942d46c）改成打补丁保留只删 fast_forwarded，结果 run 39579273036
+          #   **四平台全灭**（filogic/ipq807x/ipq60xx/armv8 同因），sfe_cm.c 还有 5 处 netfilter
+          #   API 变迁（6.12 权威定义实锤）：
+          #     511  'struct nf_tcp_net' has no member 'tcp_no_window_check'（6.12 已去掉该成员）
+          #     804  'struct nf_ct_event_notifier' has no member 'fcn'（6.12 改名 ct_event 并加了 exp_event）
+          #     804  callback 类型不兼容（fcn→ct_event 连带）
+          #     1107 void value not ignored（nf_conntrack_register_notifier 6.x 返回 void）
+          #     1195 too many arguments（nf_conntrack_unregister_notifier 6.x 只收 net）
+          #   即 Qualcomm SFE 源码停在 ~5.4，6.12 上需逐个适配 5+ 处且修完可能还有——
+          #   每轮 CI 2~4 小时，迭代成本不可接受（ALL_KMODS 会把本包扫进所有平台编译）。
+          #   决策：删包保 IB 完整；assembler 侧已把 kmod-shortcut-fe 从 filogic 平台必备
+          #   降为「可选」（platform_packages.json optional_by_target），前端卡片仍可见。
+          #   需要 filogic 硬件 HWNAT 加速时：单独立项适配 SFE 到 6.12，或改用 Kwrt IB。
+          #   注意 uninstall 只删 package/ 下的 symlink，feeds/ 源目录要单独 rm。
+          rm -rf package/kiddin9/shortcut-fe feeds/kiddin9/shortcut-fe
+          if [ -e package/kiddin9/shortcut-fe ] || [ -L package/kiddin9/shortcut-fe ] || [ -e feeds/kiddin9/shortcut-fe ]; then
+            echo "!! shortcut-fe 仍存在，删除失败"; exit 1
           fi
-          echo "shortcut-fe fast_forwarded 兼容补丁已打（sfe_ipv4/ipv6/cm 全覆盖），包保留"
+          echo "shortcut-fe 已删除 OK（SFE 与 6.12 深度不兼容，详见上方注释）"
 
       - name: Generate .config
         working-directory: openwrt
