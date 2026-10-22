@@ -454,6 +454,42 @@ jobs:
                      ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
               echo "CONFIG_PACKAGE_${p}=y"
             done
+            # ⚠️⚠️ owai 远程源**不含 core 仓库的包**（2026-10-23 实测：kiddin9 / packages /
+            #   base / luci 四个流 grep curl|iptables|iptables-nft|ip6tables-nft|libxtables12|
+            #   libip4tc2 全部 0 命中）——owai 只发 feed 包（packages/luci/routing/video/
+            #   kiddin9），core 仓库（package/network/... 那一层）一个都没有。
+            #   而 kiddin9 的包在索引里明确依赖它们（实锤）：
+            #     · firewall4                  Depends: ..., iptables, ip6tables, ...
+            #     · firewall(v3)               Depends: libip4tc2 libip6tc2 libiptext0
+            #                                           libiptext6-0 libxtables12
+            #                                           iptables-legacy ip6tables-legacy ...
+            #     · iptables-mod-fullconenat   Depends: iptables, kmod-ipt-fullconenat
+            #     · luci-app-passwall2         Depends: curl, ...
+            #   → 只能由 IB 本地出，否则 opkg "Unknown package" → assembler §4 静默剔除；
+            #     firewall4 装不上时 assembler 的重试会把 firewall4 整删（刷出来没防火墙）。
+            #   ⚠️ iptables / ip6tables 是 Provides 虚名：
+            #     iptables-nft（PROVIDES:=iptables，DEFAULT_VARIANT）
+            #     iptables-zz-legacy（PROVIDES:=iptables iptables-legacy）
+            #     两个都编，才能同时满足「要 iptables」和「要 iptables-legacy」两种依赖。
+            #     库同理：libip4tc(ABI2→libip4tc2)、libiptext(ABI0→libiptext0)。
+            for p in curl \
+                     iptables-nft ip6tables-nft iptables-zz-legacy ip6tables-zz-legacy \
+                     xtables-nft xtables-legacy libxtables libip4tc libip6tc \
+                     libiptext libiptext6 libiptext-nft \
+                     iptables-mod-conntrack-extra iptables-mod-iprange \
+                     iptables-mod-socket iptables-mod-tproxy ip6tables-mod-nat; do
+              echo "CONFIG_PACKAGE_${p}=y"
+            done
+            # ⚠️⚠️ 关闭 rootfs（2026-10-23 新增）：本流程真正需要的只是 <device>-kernel.bin
+            #   （IB 组装 make image 必需，见 Build 步注释）。全部关掉后 install-images 的
+            #   $(KDIR)/root.* 前置为空 → install 退化成「kernel_prepare + 逐机型 kernel.bin」，
+            #   不再编全套固件镜像：省时间，也避免小闪存机型 IMAGE_SIZE 超限把整个 job 挂掉。
+            echo "# CONFIG_TARGET_ROOTFS_SQUASHFS is not set"
+            echo "# CONFIG_TARGET_ROOTFS_EXT4FS is not set"
+            echo "# CONFIG_TARGET_ROOTFS_JFFS2 is not set"
+            echo "# CONFIG_TARGET_ROOTFS_UBIFS is not set"
+            echo "# CONFIG_TARGET_ROOTFS_TARGZ is not set"
+            echo "# CONFIG_TARGET_ROOTFS_CPIOGZ is not set"
           } >> .config
           make defconfig
           # ⚠️⚠️ post-defconfig：dnsmasq variant 互斥（2026-10-20 run 39413072738 实锤）：
@@ -518,17 +554,38 @@ jobs:
       #    `make package/install` 会跳过编译、且宿主 opkg 未构建 → 127 失败）：
       #    tools → toolchain → target/compile(kernel) → package/compile
       #    (含宿主 opkg 的 HOST_BUILD) → package/install(填充 bin/packages)
+      #    → target/linux/install(产 <device>-kernel.bin)
       #    → target/imagebuilder/compile。绝不单独调 package/install / IB 编译。
       #    注：25.12 已无 tools/opkg，宿主 opkg 来自 package/system/opkg host 构建。
+      #
+      #    ⚠️⚠️ target/linux/install 是 2026-10-23 补的（build (4).log 实锤）：
+      #      用自建 IB 组装时 make image 末段崩在
+      #        make[3]: *** No rule to make target
+      #        '.../build_dir/target-<arch>_musl/linux-<t>_<s>/<device>-kernel.bin'
+      #      根因：include/image.mk 的 Device/Build/kernel 只在【非 IB 且 CONFIG_IB=y】时
+      #      把 $(KDIR_KERNEL_IMAGE) 挂在 **install** 目标上；而 target/compile 到不了
+      #      （PROFILE 未设 → _PROFILE_SET 空 → _COMPILE_TARGET=compile-disabled，
+      #       且 install 才有 kernel_prepare 的 vmlinux 落盘）。
+      #      IB 打包靠 `-cp $(KERNEL_BUILD_DIR)/* $(IB_KDIR)/` 把这些文件带进 IB，
+      #      没跑 install 就是一个都没有 → 任何机型组装都在最后一步崩。
       # ------------------------------------------------------------------
-      - name: Build toolchain, kernel, all packages, then ImageBuilder
+      - name: Build toolchain, kernel, all packages, kernel images, then ImageBuilder
         working-directory: openwrt
         run: |
+          # ⚠️ 分三条 make：goal 之间在 -j 下是**可以并行**的（make 不保证左到右串行），
+          #    若把 target/linux/install 与 target/imagebuilder/compile 写在同一条命令里，
+          #    IB 打包可能抢在 kernel.bin 产出之前跑完 → 打进 IB 的还是 0 个 kernel.bin。
+          #    显式拆成三条，顺序就有保障了。
           make -j$(nproc) tools/install toolchain/install target/compile \
-                          package/compile package/install target/imagebuilder/compile V=s
+                          package/compile package/install V=s
+          make -j$(nproc) target/linux/install V=s
+          make -j$(nproc) target/imagebuilder/compile V=s
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
+          echo "--- <device>-kernel.bin 数量（IB 必需；为 0 则下游 make image 必崩）---"
+          find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | wc -l
+          find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | head -5
 
       # ⚠️ kmod 覆盖自检（对应「自编 IB + 外挂 owai 远程源」架构的必需前提）
       #   owai 远程源实测为纯 userspace（kmod-* = 0），但有 128 个包的 Depends 引用
@@ -717,6 +774,47 @@ jobs:
             exit 1
           fi
           echo "核心用户态链 17 项全部在 IB 内 ✓"
+          echo ""
+          # ⚠️⚠️ <device>-kernel.bin 硬门禁（2026-10-23 实锤，同上 build (4).log）：
+          #   IB 里没有这些文件 → 下游 assembler `make image` 末段
+          #   "No rule to make target '.../<device>-kernel.bin'" → 任何机型都组装不出来。
+          echo "--- 逐机型 kernel.bin 断言（IB 组装 make image 必需）---"
+          KB=$(tar -tf "$IB" | grep -cE 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' || true)
+          echo "kernel.bin 数 = $KB"
+          if [ "$KB" -eq 0 ]; then
+            echo "::error::IB 内 0 个 <device>-kernel.bin —— target/linux/install 没产出（或 rootfs 关过头），组装必崩，拒绝发布"
+            exit 1
+          fi
+          tar -tf "$IB" | grep -E 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' | head -3
+          echo ""
+          # ⚠️⚠️ owai 依赖、但 owai 四流实测 0 命中的 core 包（必须 IB 本地出，
+          #   详见 Generate .config 里的注释）。缺它们 firewall4 / passwall2 等装不上。
+          echo "--- core 仓库包断言（owai 没有，只能 IB 出）---"
+          MISS2=""
+          # ⚠️ ABI 后缀有两种拼法（2026-10-23）：名字不以数字结尾时直接拼（libip4tc→libip4tc2、
+          #   libxtables→libxtables12），以数字结尾时 OpenWrt 会插一个连字符
+          #   （libiptext6 的 ABI_VERSION:=0 → 真实包名 **libiptext6-0**，owai 索引里
+          #    firewall(v3) 的 Depends 就是这么写的）。故后缀要写成 (-?[0-9]*)? 。
+          for p in curl libxtables libip4tc libip6tc libiptext libiptext6; do
+            if echo "$LIST" | grep -qE "(^|/)${p}(-?[0-9]*)?_[^/]*\.ipk$"; then
+              echo "  ✓ $p"
+            else
+              echo "  ✗ $p 不在 IB 里"; MISS2="$MISS2 $p"
+            fi
+          done
+          # iptables / ip6tables 是 Provides 虚名，任一变体在即可（nft 或 zz-legacy）
+          for grp in "iptables-nft|iptables-zz-legacy" "ip6tables-nft|ip6tables-zz-legacy"; do
+            if echo "$LIST" | grep -qE "(^|/)(${grp})[0-9]*_[^/]*\.ipk$"; then
+              echo "  ✓ $grp（任一变体在）"
+            else
+              echo "  ✗ $grp 都不在 IB 里"; MISS2="$MISS2 [$grp]"
+            fi
+          done
+          if [ -n "$MISS2" ]; then
+            echo "::error::IB 缺 owai 依赖的 core 包:$MISS2 —— firewall4/passwall2 等会装不上，拒绝发布"
+            exit 1
+          fi
+          echo "core 仓库包全部在 IB 内 ✓"
           echo ""
           # STANDALONE=true 时 OpenWrt 故意只写本地源（packages 全捆绑），不含远程 owai 源；
           # 远程 owai 由下游 firmware-assembler 通过 OWAI_BASE_URL 注入。故 200 校验仅在非 standalone 时做。
