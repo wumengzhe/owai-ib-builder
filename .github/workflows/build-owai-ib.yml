@@ -864,6 +864,44 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # ⚠️ 本机没有 GitHub token，读不到 Actions 的 job 日志（私有仓）。失败时把关键现场
+      #    推到 **ci-logs** 分支，我这边用 git + SSH 就能取回逐个排查。
+      #    ⚠️ 绝不能推回 ci-filogic（那会又触发一次 workflow → 死循环），所以用独立分支。
+      #    ci-logs 是临时分支，整轮修完会连同 ci-filogic 一起删掉。
+      - name: Dump diagnostics to ci-logs branch (on failure)
+        if: failure()
+        working-directory: openwrt
+        continue-on-error: true
+        run: |
+          {
+            echo "run=${{ github.run_id }} attempt=${{ github.run_attempt }} target=$TARGET"
+            echo "--- .config 关键项 ---"
+            grep -E '^(CONFIG_TARGET_ROOTFS|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_ALL_KMODS)' .config 2>/dev/null
+            grep -E '^CONFIG_PACKAGE_(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables|libip4tc|libip6tc|libiptext6|libiptext|xtables-legacy|xtables-nft)=' .config 2>/dev/null
+            echo "--- kernel.bin 数（为 0 说明 target/linux/install 没产出）---"
+            find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' 2>/dev/null | wc -l
+            find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' 2>/dev/null | head -5
+            echo "--- KDIR(linux-*) 顶层内容前 20 ---"
+            ls build_dir/target-*/linux-*/ 2>/dev/null | head -20
+            echo "--- bin/packages 关键包（core 仓库那批）---"
+            find bin/packages -name '*.ipk' -printf '%f\n' 2>/dev/null \
+              | grep -E '^(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables12|libip4tc2|libip6tc2|libiptext0|libiptext6-0)' \
+              | head -20
+          } > /tmp/diag.txt 2>&1
+          cat /tmp/diag.txt
+          D=/tmp/cilog; rm -rf "$D"
+          if git clone --depth 1 -b ci-logs "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$D"; then
+            echo "ci-logs 分支已存在"
+          else
+            mkdir -p "$D"; git -C "$D" init -q -b ci-logs
+            echo "ci-logs 分支不存在，本地新建"
+          fi
+          mkdir -p "$D/logs"
+          cp /tmp/diag.txt "$D/logs/${{ github.run_id }}-${TARGET_SAFE}.txt"
+          git -C "$D" -c user.email=ci@local -c user.name=ci add -A
+          git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}"
+          git -C "$D" push origin HEAD:ci-logs
+
       - name: Create release
         # ⚠️ 本条件曾写 `inputs.make_release != false`——正是 env 注释里同款坑：
         #    push 触发时 inputs.* 全为 ''，而 GH 表达式里 `'' == false` 判定为 true
