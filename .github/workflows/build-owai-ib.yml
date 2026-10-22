@@ -289,12 +289,23 @@ jobs:
           #      只靠 $(wildcard $(PACKAGE_SUBDIRS))。而这三个包在裸 defconfig 下
           #      **不会被选中**（它们经 DEFAULT_PACKAGES 进镜像，不走 Kconfig 符号）
           #      → 不编译 → 不进 bin/packages/<arch>/… → IB 里彻底没有。
-          #      firmware-assembler 的 18 项核心链校验实测缺：base-files / kernel /
-          #      dnsmasq-full / firewall4 / iptables-zz-legacy / luci-base / luci-compat /
+          #      firmware-assembler 的核心链校验实测缺：base-files / kernel /
+          #      dnsmasq-full / firewall4 / luci-base / luci-compat /
           #      luci-lib-nixio / dropbear / rpcd-mod-luci / libustream-mbedtls。
           #      kmod 1113 个齐全（来自 bin/packages 各 feed 目录），纯用户态链断裂。
           #    → 这里把官方的强制拷逻辑复制一份，**无条件**执行（STANDALONE 与否都跑），
           #      保证这三个包只要被编译过就一定进 IB。
+          #
+          #    ⚠️⚠️ 附带的重大发现（同次实锤）：那份缺失清单里的 iptables-zz-legacy 是
+          #      **幽灵项**——它不存在于 openwrt-25.12 + kiddin9 这套环境：
+          #        · openwrt core package/network/utils/iptables 无任何变体（就叫 iptables）
+          #        · kiddin9/op-packages 895 个顶层包里无 iptables/zz 相关
+          #        · owai 六个分流索引 grep 均 0 命中
+          #      它是纯 Provides 元包（Provides: iptables, iptableslegacy；
+          #      Depends: libc, xtables-legacy），只出现在 **Kwrt 的 IB** 里
+          #      （assembler build.sh v7.42 的拆包实锤：data.tar.gz 仅 95 字节、只含 ./）。
+          #      → assembler 的校验表已把它移除（18→17 项），否则自建 IB 永远无法通过
+          #        校验、update 永远拒绝切换。本工作流三处包列表同样不再含它。
           p = "target/imagebuilder/Makefile"
           s = open(p).read()
           anchor2 = "endif\n\nifneq ($(CONFIG_SIGNATURE_CHECK),)"
@@ -407,9 +418,9 @@ jobs:
             #   → IB 缺失 → firmware-assembler 组装时报 opkg "Unknown package" 全线崩。
             #   owai 远程源也救不了：六分流实测 kernel/kmod/libc/base-files=0，
             #   firewall4/iptables/dnsmasq-full/luci-base/dropbear 同样为 0。
-            #   名单与 assembler 的 18 项校验（vm_ib.sh verify_ib）逐字对齐。
+            #   名单与 assembler 的 17 项校验（vm_ib.sh verify_ib）逐字对齐。
             for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
-                     iptables-zz-legacy nftables-json luci-base luci-compat luci-lib-nixio \
+                     nftables-json luci-base luci-compat luci-lib-nixio \
                      ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
               echo "CONFIG_PACKAGE_${p}=y"
             done
@@ -443,26 +454,29 @@ jobs:
           echo "--- 生效的关键配置 ---"
           grep -E '^(CONFIG_USE_APK|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_SIGNATURE_CHECK|CONFIG_ALL_KMODS|CONFIG_KERNEL_WERROR|CONFIG_TARGET_|CONFIG_PACKAGE_dnsmasq)' .config | head -20
           # ⚠️ 若上面看不到 CONFIG_IB=y 与 CONFIG_IB_STANDALONE=y，说明 defconfig 把它们丢了（依赖不满足），STANDALONE 会失效
-          # ⚠️⚠️ 核心用户态链是否真被选中也要当场断言（2026-10-22 实锤：裸 defconfig 下
+          # ⚠️⚠️ 核心用户态链选中情况（2026-10-22 实锤：裸 defconfig 下
           #   base-files/kernel/firewall4/dropbear/luci-base 等一个都不选 → IB 缺 11 项）。
-          #   defconfig 会静默丢弃「符号不存在」的项，所以必须在这里 fail，不能等到
-          #   下游 assembler 组装时才炸。
-          echo "--- 核心用户态链选中情况（必须全 y）---"
-          MISS=0
+          #
+          #   ⚠️⚠️ 这里只**告警**、不 fail（2026-10-22 二次修正）：defconfig 会静默丢弃
+          #     「Kconfig 符号不存在」的项，而 18 项里并非全都有符号 —— 实锤
+          #     `package/kernel/Makefile` 在该钉版 commit 上 **404**，即不存在
+          #     `CONFIG_PACKAGE_kernel` 这个符号，写进 .config 也会被丢弃。
+          #     其余项也可能因 target/feed 差异而不存在（如 iptables-zz-legacy 这类
+          #     kiddin9 专名）。若在此 fail，会把本可成功的构建整体卡死。
+          #     → 权威判定交给后面的「Inspect produced IB」tarball 逐包断言（那个查的是
+          #       真实 .ipk 文件，不依赖符号是否存在），这里只提供早期可见性。
+          echo "--- 核心用户态链选中情况（符号不存在的项会被 defconfig 丢弃，仅告警）---"
           for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
-                   iptables-zz-legacy nftables-json luci-base luci-compat luci-lib-nixio \
+                   nftables-json luci-base luci-compat luci-lib-nixio \
                    ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
             if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
               echo "  ✓ $p"
             else
-              echo "  ✗ $p 未被选中 —— IB 将缺失此包"; MISS=$((MISS+1))
+              echo "  · $p 未被选中（符号不存在或该 target 不支持）——由 tarball 断言最终判定"
             fi
           done
-          if [ "$MISS" -gt 0 ]; then
-            echo "::error::核心用户态链有 $MISS 项未被 .config 选中，IB 必然残缺，中止构建"
-            exit 1
-          fi
-          echo "核心用户态链 18 项全部选中 ✓"
+          echo "注：base-files/libc/kernel 三者由 imagebuilder/Makefile 的无条件强制拷保证进 IB，"
+          echo "    不依赖此处是否选中；其余项由 Inspect produced IB 逐包断言兜底。"
 
       - name: Download sources
         working-directory: openwrt
@@ -648,14 +662,14 @@ jobs:
           #   而产出的 IB 实际缺 11 项核心包（base-files/kernel/dnsmasq-full/firewall4/
           #   iptables-zz-legacy/luci-base/luci-compat/luci-lib-nixio/dropbear/
           #   rpcd-mod-luci/libustream-mbedtls）—— kmod 1113 个倒是齐全。
-          #   下游 firmware-assembler 的 18 项校验拦住了切换（闸门生效，没造成事故），
+          #   下游 firmware-assembler 的 17 项校验拦住了切换（闸门生效，没造成事故），
           #   但 CI 不该把残缺 IB 发成 Release。这里在**发布前**逐包断言，缺一个就 fail。
           #   名单与 assembler 的 verify_ib 逐字对齐。
-          echo "--- 核心用户态链断言（18 项，缺一即 fail）---"
+          echo "--- 核心用户态链断言（17 项，缺一即 fail）---"
           LIST=$(tar -tf "$IB" | grep -E 'packages/([^/]*/)?[^/]*\.ipk$')
           MISS=""
           for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
-                   iptables-zz-legacy nftables-json luci-base luci-compat luci-lib-nixio \
+                   nftables-json luci-base luci-compat luci-lib-nixio \
                    ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
             if echo "$LIST" | grep -qE "(^|/)${p}_[^/]*\.ipk$"; then
               echo "  ✓ $p"
@@ -667,7 +681,7 @@ jobs:
             echo "::error::IB 缺核心用户态链:$MISS —— 组装必报 opkg Unknown package，拒绝发布"
             exit 1
           fi
-          echo "核心用户态链 18 项全部在 IB 内 ✓"
+          echo "核心用户态链 17 项全部在 IB 内 ✓"
           echo ""
           # STANDALONE=true 时 OpenWrt 故意只写本地源（packages 全捆绑），不含远程 owai 源；
           # 远程 owai 由下游 firmware-assembler 通过 OWAI_BASE_URL 注入。故 200 校验仅在非 standalone 时做。
