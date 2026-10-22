@@ -628,3 +628,72 @@ jobs:
             out/sha256sums
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prune old IB tags & releases (keep newest 1 per platform)
+        # 用户需求（2026-10-22）：更新时删掉旧 IB 包，避免 tag/asset 堆积占空间。
+        # 现状实锤：曾堆积 9 个 IB tag（旧的 5 个甚至没有对应 Release——发布失败或被手删，
+        # tag 残留），每个 asset ~87MB。清理逻辑两条都管：
+        #   DELETE /releases/{id}     —— 连 asset 一起删（GitHub 会连带删 asset blob）
+        #   DELETE /git/refs/tags/*  —— 没 Release 的残留 tag 也清掉
+        # 并发安全：prefix 含平台名（ib-25.12-owai-<board>-<sub>-），四个并行 job 各清各的，
+        # 互不重叠。时机在 Create release 之后，确保不会删掉本轮刚建的。
+        if: ${{ always() && (inputs.make_release == true || inputs.make_release == '' || inputs.make_release == null) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_NEWEST: 1
+          TAG_PREFIX: ib-${{ env.VERSION_NUMBER }}-${{ env.TARGET_SAFE }}-
+          MY_TAG: ib-${{ env.VERSION_NUMBER }}-${{ env.TARGET_SAFE }}-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, sys, urllib.request, urllib.error
+
+          API = "https://api.github.com/repos/wumengzhe/owai-ib-builder"
+          TOK = os.environ["GH_TOKEN"]
+          PREFIX = os.environ["TAG_PREFIX"]
+          MY_TAG = os.environ["MY_TAG"]
+          KEEP = int(os.environ.get("KEEP_NEWEST", "1"))
+
+          def api(method, path):
+              req = urllib.request.Request(API + path, method=method)
+              req.add_header("Authorization", "Bearer " + TOK)
+              req.add_header("Accept", "application/vnd.github+json")
+              req.add_header("User-Agent", "owai-ib-builder-prune")
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      return r.status, (json.load(r) if r.status != 204 else None)
+              except urllib.error.HTTPError as e:
+                  return e.code, None
+
+          def runid(tag):
+              m = re.search(r"-(\d+)$", tag)
+              return int(m.group(1)) if m else 0
+
+          # 1) 本平台旧 Release（排除本轮 tag；保留 run_id 最大的 KEEP 个）
+          st, rels = api("GET", "/releases?per_page=100")
+          if st != 200:
+              print("[prune] 拉取 releases 失败 HTTP %s，跳过（本步非致命）" % st); sys.exit(0)
+          mine = [r for r in rels if r["tag_name"].startswith(PREFIX)]
+          mine.sort(key=lambda r: runid(r["tag_name"]), reverse=True)
+          doomed = mine[KEEP:]
+          # 2) 同平台残留 tag（有些 tag 根本没有 Release——发布失败或被手删）
+          st, tags = api("GET", "/git/matching-refs/tags/" + PREFIX)
+          if st == 200 and tags:
+              live = {r["tag_name"] for r in mine[:KEEP]} | {MY_TAG}
+              for r in tags:
+                  n = r["ref"].split("/")[-1]
+                  if n not in live and runid(n) and n not in [d["tag_name"] for d in doomed]:
+                      doomed.append({"tag_name": n, "_ref": True})
+          for d in doomed:
+              if d.get("_ref"):
+                  st, _ = api("DELETE", "/git/refs/tags/" + d["tag_name"])
+                  print("[prune] 删残留 tag %s -> HTTP %s" % (d["tag_name"], st))
+              else:
+                  st, _ = api("DELETE", "/releases/%s" % d["id"])
+                  print("[prune] 删旧 Release %s (assets %d 个) -> HTTP %s"
+                        % (d["tag_name"], len(d.get("assets", [])), st))
+                  st2, _ = api("DELETE", "/git/refs/tags/" + d["tag_name"])
+                  print("        连带删 tag -> HTTP %s" % st2)
+          print("[prune] 本平台共 %d 个历史 Release/tag，本次保留 %d、清理 %d"
+                % (len(mine), min(KEEP, len(mine)), len(doomed)))
+          PY
