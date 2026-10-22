@@ -281,6 +281,43 @@ jobs:
               print("[imagebuilder/Makefile] STANDALONE 补拷 bin/targets 已注入")
           else:
               print("[imagebuilder/Makefile] !! 未匹配 STANDALONE FIND 锚点，请检查 openwrt 源码"); sys.exit(1)
+
+          # 5) target/imagebuilder/Makefile —— STANDALONE 下也必须强制拷 base-files/libc/kernel
+          #
+          #    ⚠️⚠️ 2026-10-22 实锤（run 39593223394 产出的 IB，sha256 校验通过仍缺 11 项核心包）：
+          #      官方 L71-77 只在【非】STANDALONE 分支强制拷这三个包；STANDALONE 分支
+          #      只靠 $(wildcard $(PACKAGE_SUBDIRS))。而这三个包在裸 defconfig 下
+          #      **不会被选中**（它们经 DEFAULT_PACKAGES 进镜像，不走 Kconfig 符号）
+          #      → 不编译 → 不进 bin/packages/<arch>/… → IB 里彻底没有。
+          #      firmware-assembler 的 18 项核心链校验实测缺：base-files / kernel /
+          #      dnsmasq-full / firewall4 / iptables-zz-legacy / luci-base / luci-compat /
+          #      luci-lib-nixio / dropbear / rpcd-mod-luci / libustream-mbedtls。
+          #      kmod 1113 个齐全（来自 bin/packages 各 feed 目录），纯用户态链断裂。
+          #    → 这里把官方的强制拷逻辑复制一份，**无条件**执行（STANDALONE 与否都跑），
+          #      保证这三个包只要被编译过就一定进 IB。
+          p = "target/imagebuilder/Makefile"
+          s = open(p).read()
+          anchor2 = "endif\n\nifneq ($(CONFIG_SIGNATURE_CHECK),)"
+          force = ("endif\n\n"
+                   "# wmz 补丁 2026-10-22: 无条件强制拷入 base-files/libc/kernel。\n"
+                   "# 官方只在非 STANDALONE 分支做此事；STANDALONE 分支这三个包若未被\n"
+                   "# .config 选中就不会编译，IB 直接缺失 → assembler opkg Unknown package。\n"
+                   "$(FIND) $(call FeedPackageDir,libc) -type f \\\n"
+                   "  \\( \\\n"
+                   "\t-name 'base-files$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\\n"
+                   "\t-name 'libc$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\\n"
+                   "\t-name 'kernel$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' \\) \\\n"
+                   "  -exec $(CP) -t $(PKG_BUILD_DIR)/packages {} +\n"
+                   "\n"
+                   "ifneq ($(CONFIG_SIGNATURE_CHECK),)")
+          if anchor2 in s and "wmz 补丁 2026-10-22" not in s:
+              s = s.replace(anchor2, force, 1)
+              open(p, "w").write(s)
+              print("[imagebuilder/Makefile] 无条件强制拷 base-files/libc/kernel 已注入")
+          elif "wmz 补丁 2026-10-22" in s:
+              print("[imagebuilder/Makefile] 强制拷补丁已存在，跳过")
+          else:
+              print("[imagebuilder/Makefile] !! 未匹配 SIGNATURE_CHECK 锚点"); sys.exit(1)
           PY
 
       - name: Update and install feeds
@@ -364,6 +401,18 @@ jobs:
             else
               echo "# CONFIG_IB_STANDALONE is not set"
             fi
+            # ⚠️⚠️ 核心用户态链必须显式选中（2026-10-22 实锤，run 39593223394 的 IB 缺 11 项）：
+            #   这批包在裸 defconfig 下【不会被选中】——它们经 DEFAULT_PACKAGES 进镜像，
+            #   不走 Kconfig 符号；而 IB 目标不构建镜像 → 不编译 → 不进 bin/packages
+            #   → IB 缺失 → firmware-assembler 组装时报 opkg "Unknown package" 全线崩。
+            #   owai 远程源也救不了：六分流实测 kernel/kmod/libc/base-files=0，
+            #   firewall4/iptables/dnsmasq-full/luci-base/dropbear 同样为 0。
+            #   名单与 assembler 的 18 项校验（vm_ib.sh verify_ib）逐字对齐。
+            for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
+                     iptables-zz-legacy nftables-json luci-base luci-compat luci-lib-nixio \
+                     ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
+              echo "CONFIG_PACKAGE_${p}=y"
+            done
           } >> .config
           make defconfig
           # ⚠️⚠️ post-defconfig：dnsmasq variant 互斥（2026-10-20 run 39413072738 实锤）：
@@ -394,6 +443,26 @@ jobs:
           echo "--- 生效的关键配置 ---"
           grep -E '^(CONFIG_USE_APK|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_SIGNATURE_CHECK|CONFIG_ALL_KMODS|CONFIG_KERNEL_WERROR|CONFIG_TARGET_|CONFIG_PACKAGE_dnsmasq)' .config | head -20
           # ⚠️ 若上面看不到 CONFIG_IB=y 与 CONFIG_IB_STANDALONE=y，说明 defconfig 把它们丢了（依赖不满足），STANDALONE 会失效
+          # ⚠️⚠️ 核心用户态链是否真被选中也要当场断言（2026-10-22 实锤：裸 defconfig 下
+          #   base-files/kernel/firewall4/dropbear/luci-base 等一个都不选 → IB 缺 11 项）。
+          #   defconfig 会静默丢弃「符号不存在」的项，所以必须在这里 fail，不能等到
+          #   下游 assembler 组装时才炸。
+          echo "--- 核心用户态链选中情况（必须全 y）---"
+          MISS=0
+          for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
+                   iptables-zz-legacy nftables-json luci-base luci-compat luci-lib-nixio \
+                   ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
+            if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
+              echo "  ✓ $p"
+            else
+              echo "  ✗ $p 未被选中 —— IB 将缺失此包"; MISS=$((MISS+1))
+            fi
+          done
+          if [ "$MISS" -gt 0 ]; then
+            echo "::error::核心用户态链有 $MISS 项未被 .config 选中，IB 必然残缺，中止构建"
+            exit 1
+          fi
+          echo "核心用户态链 18 项全部选中 ✓"
 
       - name: Download sources
         working-directory: openwrt
@@ -573,6 +642,32 @@ jobs:
           echo "kmod 数   = $KMOD"
           PKGMGR=$( [ -f "$D/repositories.conf" ] && echo opkg || echo apk )
           echo "包管理    = $PKGMGR"
+          echo ""
+          # ⚠️⚠️ 核心用户态链硬门禁（2026-10-22 实锤后新增）：
+          #   此前本步只「数 ipk 个数」，于是 run 39593223394 四平台全绿、Release 正常发布，
+          #   而产出的 IB 实际缺 11 项核心包（base-files/kernel/dnsmasq-full/firewall4/
+          #   iptables-zz-legacy/luci-base/luci-compat/luci-lib-nixio/dropbear/
+          #   rpcd-mod-luci/libustream-mbedtls）—— kmod 1113 个倒是齐全。
+          #   下游 firmware-assembler 的 18 项校验拦住了切换（闸门生效，没造成事故），
+          #   但 CI 不该把残缺 IB 发成 Release。这里在**发布前**逐包断言，缺一个就 fail。
+          #   名单与 assembler 的 verify_ib 逐字对齐。
+          echo "--- 核心用户态链断言（18 项，缺一即 fail）---"
+          LIST=$(tar -tf "$IB" | grep -E 'packages/([^/]*/)?[^/]*\.ipk$')
+          MISS=""
+          for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
+                   iptables-zz-legacy nftables-json luci-base luci-compat luci-lib-nixio \
+                   ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
+            if echo "$LIST" | grep -qE "(^|/)${p}_[^/]*\.ipk$"; then
+              echo "  ✓ $p"
+            else
+              echo "  ✗ $p 不在 IB 里"; MISS="$MISS $p"
+            fi
+          done
+          if [ -n "$MISS" ]; then
+            echo "::error::IB 缺核心用户态链:$MISS —— 组装必报 opkg Unknown package，拒绝发布"
+            exit 1
+          fi
+          echo "核心用户态链 18 项全部在 IB 内 ✓"
           echo ""
           # STANDALONE=true 时 OpenWrt 故意只写本地源（packages 全捆绑），不含远程 owai 源；
           # 远程 owai 由下游 firmware-assembler 通过 OWAI_BASE_URL 注入。故 200 校验仅在非 standalone 时做。
