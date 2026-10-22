@@ -701,7 +701,12 @@ jobs:
           for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
                    nftables-json luci-base luci-compat luci-lib-nixio \
                    ppp-mod-pppoe dropbear odhcp6c rpcd-mod-luci libustream-mbedtls; do
-            if echo "$LIST" | grep -qE "(^|/)${p}_[^/]*\.ipk$"; then
+            # ⚠️ 匹配必须容忍 ABI 版本后缀（run 39755751903 实锤误报）：
+            #   libustream 的 mbedtls 变体真实包名是 libustream-mbedtls20201210
+            #   （PKG_ABI_VERSION 拼在名字后），不是 libustream-mbedtls。
+            #   若用 "^libustream-mbedtls_" 会漏匹配 → 门禁误报缺包 → 拒绝发布。
+            #   故允许 name 后紧跟一串数字（ABI）再跟 _。
+            if echo "$LIST" | grep -qE "(^|/)${p}[0-9]*_[^/]*\.ipk$"; then
               echo "  ✓ $p"
             else
               echo "  ✗ $p 不在 IB 里"; MISS="$MISS $p"
