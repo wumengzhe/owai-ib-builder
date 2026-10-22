@@ -279,6 +279,8 @@ jobs:
               s = s.replace(anchor, inject, 1)
               open(p, "w").write(s)
               print("[imagebuilder/Makefile] STANDALONE 补拷 bin/targets 已注入")
+          elif "wmz 补丁 2026-10-21" in s:
+              print("[imagebuilder/Makefile] bin/targets 补拷已存在，跳过（幂等）")
           else:
               print("[imagebuilder/Makefile] !! 未匹配 STANDALONE FIND 锚点，请检查 openwrt 源码"); sys.exit(1)
 
@@ -309,22 +311,50 @@ jobs:
           p = "target/imagebuilder/Makefile"
           s = open(p).read()
           anchor2 = "endif\n\nifneq ($(CONFIG_SIGNATURE_CHECK),)"
-          force = ("endif\n\n"
-                   "# wmz 补丁 2026-10-22: 无条件强制拷入 base-files/libc/kernel。\n"
-                   "# 官方只在非 STANDALONE 分支做此事；STANDALONE 分支这三个包若未被\n"
-                   "# .config 选中就不会编译，IB 直接缺失 → assembler opkg Unknown package。\n"
-                   "$(FIND) $(call FeedPackageDir,libc) -type f \\\n"
-                   "  \\( \\\n"
-                   "\t-name 'base-files$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\\n"
-                   "\t-name 'libc$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\\n"
-                   "\t-name 'kernel$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' \\) \\\n"
-                   "  -exec $(CP) -t $(PKG_BUILD_DIR)/packages {} +\n"
-                   "\n"
-                   "ifneq ($(CONFIG_SIGNATURE_CHECK),)")
+          # ⚠️⚠️⚠️ 注入块的每一行【必须以 TAB 开头】——2026-10-22 run 39741239372 实锤教训：
+          #   我第一版把官方那几行的「续行」写成了空格缩进（视觉抄的），make 直接
+          #   `Makefile:91: *** missing separator. Stop.` → target/imagebuilder/compile
+          #   Error 1 → 四平台里 filogic 整盘失败（跑了一小时才看到）。
+          #   官方原文（cat -A 实测，L72-77）每一行都是 ^I 开头：
+          #     ^I$(FIND) $(call FeedPackageDir,libc) -type f \
+          #     ^I  \( \
+          #     ^I^I-name 'base-files...' -or \
+          #     ...
+          #     ^I  -exec $(CP) -t $(PKG_BUILD_DIR)/packages {} +
+          #   这些行属同一个 recipe 的续行，TAB 是 make 的 recipe 标识，换成空格即语法错误。
+          #   → 下面所有行一律 "\t" 开头，并在注入后逐行自校验（见 _assert_tabs）。
+          force_lines = [
+              "\t# wmz 补丁 2026-10-22: 无条件强制拷入 base-files/libc/kernel。",
+              "\t# 官方只在非 STANDALONE 分支做此事；STANDALONE 分支这三个包若未被",
+              "\t# .config 选中就不会编译，IB 直接缺失 → assembler opkg Unknown package。",
+              "\t$(FIND) $(call FeedPackageDir,libc) -type f \\",
+              "\t  \\( \\",
+              "\t\t-name 'base-files$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\",
+              "\t\t-name 'libc$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\",
+              "\t\t-name 'kernel$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' \\) \\",
+              "\t  -exec $(CP) -t $(PKG_BUILD_DIR)/packages {} +",
+          ]
+          def _assert_tabs(lines, tag):
+              """make 的 recipe 续行必须全以 TAB 开头；空格缩进会 missing separator。"""
+              for ln in lines:
+                  body = ln.rstrip("\n")
+                  if not body or body.lstrip().startswith("#"):
+                      continue
+                  if not body.startswith("\t"):
+                      print("[imagebuilder/Makefile] !! %s 行未以 TAB 开头: %r" % (tag, body[:60]))
+                      sys.exit(1)
+          _assert_tabs(force_lines, "强制拷补丁")
+          force = "endif\n\n" + "\n".join(force_lines) + "\n\nifneq ($(CONFIG_SIGNATURE_CHECK),)"
           if anchor2 in s and "wmz 补丁 2026-10-22" not in s:
               s = s.replace(anchor2, force, 1)
               open(p, "w").write(s)
-              print("[imagebuilder/Makefile] 无条件强制拷 base-files/libc/kernel 已注入")
+              # 落盘后再全校验一遍：确保注入区每行都合规（防手改回归）
+              _chk = [l for l in open(p).read().splitlines()
+                      if "FeedPackageDir,libc" in l or "base-files$(PACKAGE_VERSION_SEPARATOR)" in l]
+              _bad = [l for l in _chk if l.strip() and not l.startswith("\t")]
+              if _bad:
+                  print("[imagebuilder/Makefile] !! 注入后校验失败，未以 TAB 开头 %d 行" % len(_bad)); sys.exit(1)
+              print("[imagebuilder/Makefile] 无条件强制拷 base-files/libc/kernel 已注入（TAB 校验通过）")
           elif "wmz 补丁 2026-10-22" in s:
               print("[imagebuilder/Makefile] 强制拷补丁已存在，跳过")
           else:
