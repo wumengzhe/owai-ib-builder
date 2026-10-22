@@ -472,13 +472,22 @@ jobs:
             #     iptables-zz-legacy（PROVIDES:=iptables iptables-legacy）
             #     两个都编，才能同时满足「要 iptables」和「要 iptables-legacy」两种依赖。
             #     库同理：libip4tc(ABI2→libip4tc2)、libiptext(ABI0→libiptext0)。
+            # ⚠️ 这里用 **=m**（只出 ipk、不装进 staging rootfs），不是 =y：
+            #   package/install 阶段会把所有 =y 的包 opkg 装进 $(TARGET_DIR)，
+            #   两个 iptables 变体同时 =y 就有可能像当初 dnsmasq variant 那样
+            #   在 package/Makefile:100 打架（数据文件冲突 → Error 255 → 整盘挂）。
+            #   我们要的只是 ipk 进 IB（bin/packages），=m 正好：编出来但不装。
+            # 两个变体都编，是因 owai 索引实锤 12+34+1 处 Depends 引用虚名 iptables、
+            # 7 处引用 ip6tables、1 处引用 iptables-legacy，而**没有任何一处**引用
+            # 实名 iptables-nft / ip6tables-nft —— 故 zz-legacy（同时 PROVIDES
+            # iptables-legacy）覆盖面最大，nft 变体留着兜底实名依赖。
             for p in curl \
                      iptables-nft ip6tables-nft iptables-zz-legacy ip6tables-zz-legacy \
                      xtables-nft xtables-legacy libxtables libip4tc libip6tc \
                      libiptext libiptext6 libiptext-nft \
                      iptables-mod-conntrack-extra iptables-mod-iprange \
                      iptables-mod-socket iptables-mod-tproxy ip6tables-mod-nat; do
-              echo "CONFIG_PACKAGE_${p}=y"
+              echo "CONFIG_PACKAGE_${p}=m"
             done
             # ⚠️⚠️ 关闭 rootfs（2026-10-23 新增）：本流程真正需要的只是 <device>-kernel.bin
             #   （IB 组装 make image 必需，见 Build 步注释）。全部关掉后 install-images 的
