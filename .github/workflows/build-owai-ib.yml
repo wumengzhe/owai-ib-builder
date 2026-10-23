@@ -590,14 +590,19 @@ jobs:
           #    若把 target/linux/install 与 target/imagebuilder/compile 写在同一条命令里，
           #    IB 打包可能抢在 kernel.bin 产出之前跑完 → 打进 IB 的还是 0 个 kernel.bin。
           #    显式拆成三条，顺序就有保障了。
-          make -j$(nproc) tools/install toolchain/install target/compile \
+          # ⚠️⚠️ 2026-10-24：用 { … } 2>&1 | tee /tmp/build.log 把完整 make 输出落盘。
+          #    GH 默认 shell 已带 -o pipefail，所以 make 真实退出码仍能触发本步失败；
+          #    同时 /tmp/build.log 供失败时的 Dump 步抓取——否则 ci-logs 一旦失明，
+          #    我们连 make 报什么错都看不到（这正是 run2 失明的原因）。
+          { make -j$(nproc) tools/install toolchain/install target/compile \
                           package/compile package/install V=s
-          make -j$(nproc) target/linux/install V=s
-          make -j$(nproc) target/imagebuilder/compile V=s
+            make -j$(nproc) target/linux/install V=s
+            make -j$(nproc) target/imagebuilder/compile V=s
+          } 2>&1 | tee /tmp/build.log
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
-          echo "--- <device>-kernel.bin 数量（IB 必需；为 0 则下游 make image 必崩）---"
+          echo "--- <device>-kernel.bin 数量（上游 target 无 KERNEL_INSTALL，合法为 0；仅观测）---"
           find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | wc -l
           find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | head -5
 
@@ -792,14 +797,19 @@ jobs:
           # ⚠️⚠️ <device>-kernel.bin 硬门禁（2026-10-23 实锤，同上 build (4).log）：
           #   IB 里没有这些文件 → 下游 assembler `make image` 末段
           #   "No rule to make target '.../<device>-kernel.bin'" → 任何机型都组装不出来。
-          echo "--- 逐机型 kernel.bin 断言（IB 组装 make image 必需）---"
+          # ⚠️⚠️ <device>-kernel.bin 检查（2026-10-23 写入，2026-10-24 修正）：
+          #   原逻辑：IB 必须内嵌 <device>-kernel.bin，否则下游 make image 运行期 IB=1 时
+          #   image.mk 的 kernel.bin 规则被 `ifndef IB` 屏蔽 → "No rule to make target …" 崩。
+          #   但经核对上游 openwrt-25.12 源码：mediatek / qualcommax / rockchip **四个 target
+          #   没有任何设备设 KERNEL_INSTALL**（grep 全树仅 armsr/at91/imx/ipq40xx 有）。
+          #   故这些 IB 合法地、必然地含 0 个 kernel.bin——内核在 make image 运行期由
+          #   image_prepare 从源码现编（vmlinux → lzma → fit），并不需要预置 kernel.bin。
+          #   → 原门禁对上游 IB 永远误报，已改为【仅观测、不阻断】。
+          #   下游 vm_ib.sh 才是逐设备 kernel 需求的权威（它针对注入 KERNEL_INSTALL 设备的场景）。
+          echo "--- 逐机型 kernel.bin 计数（上游 target 合法为 0；仅观测，不阻断）---"
           KB=$(tar -tf "$IB" | grep -cE 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' || true)
-          echo "kernel.bin 数 = $KB"
-          if [ "$KB" -eq 0 ]; then
-            echo "::error::IB 内 0 个 <device>-kernel.bin —— target/linux/install 没产出（或 rootfs 关过头），组装必崩，拒绝发布"
-            exit 1
-          fi
-          tar -tf "$IB" | grep -E 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' | head -3
+          echo "kernel.bin 数 = $KB（上游 target 无 KERNEL_INSTALL 设备时为 0，属正常）"
+          tar -tf "$IB" | grep -E 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' | head -3 || true
           echo ""
           # ⚠️⚠️ owai 依赖、但 owai 四流实测 0 命中的 core 包（必须 IB 本地出，
           #   详见 Generate .config 里的注释）。缺它们 firewall4 / passwall2 等装不上。
@@ -878,15 +888,19 @@ jobs:
             echo "--- .config 关键项 ---"
             grep -E '^(CONFIG_TARGET_ROOTFS|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_ALL_KMODS)' .config 2>/dev/null
             grep -E '^CONFIG_PACKAGE_(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables|libip4tc|libip6tc|libiptext6|libiptext|xtables-legacy|xtables-nft)=' .config 2>/dev/null
-            echo "--- kernel.bin 数（为 0 说明 target/linux/install 没产出）---"
+            echo "--- kernel.bin 数（上游 target 合法为 0；仅观测）---"
             find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' 2>/dev/null | wc -l
             find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' 2>/dev/null | head -5
-            echo "--- KDIR(linux-*) 顶层内容前 20 ---"
-            ls build_dir/target-*/linux-*/ 2>/dev/null | head -20
+            echo "--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---"
+            # ⚠️ 2026-10-24 修正：原 `linux-*/` 会把 linux-firmware-20260221 也算进来，
+            #   掩盖真正的内核构建目录。用 linux-[!f]* 排除 firmware 目录。
+            ls build_dir/target-*/linux-[!f]*/ 2>/dev/null | head -20
             echo "--- bin/packages 关键包（core 仓库那批）---"
             find bin/packages -name '*.ipk' -printf '%f\n' 2>/dev/null \
               | grep -E '^(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables12|libip4tc2|libip6tc2|libiptext0|libiptext6-0)' \
               | head -20
+            echo "--- Build 步 make 实际报错（末 80 行，ci-logs 失明时的唯一现场）---"
+            tail -80 /tmp/build.log 2>/dev/null || echo "(无 /tmp/build.log)"
           } > /tmp/diag.txt 2>&1
           cat /tmp/diag.txt
           D=/tmp/cilog; rm -rf "$D"
@@ -894,7 +908,11 @@ jobs:
             echo "ci-logs 分支已存在"
           else
             mkdir -p "$D"; git -C "$D" init -q -b ci-logs
-            echo "ci-logs 分支不存在，本地新建"
+            # ⚠️ 2026-10-24 实锤：git init 后忘了加 origin → 下面 push origin 永远报
+            #   "fatal: 'origin' does not appear to be a git repository" → ci-logs 分支
+            #   永远建不出来，本机彻底失明。这里必须把 token URL 绑定为 origin。
+            git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            echo "ci-logs 分支不存在，本地新建并绑定 origin"
           fi
           mkdir -p "$D/logs"
           cp /tmp/diag.txt "$D/logs/${{ github.run_id }}-${TARGET_SAFE}.txt"
