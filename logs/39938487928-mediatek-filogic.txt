@@ -1,0 +1,133 @@
+run=39938487928 attempt=1 target=mediatek/filogic
+--- .config 关键项 ---
+CONFIG_TARGET_ROOTFS_INITRAMFS=y
+CONFIG_TARGET_ROOTFS_INITRAMFS_SEPARATE=y
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_TARGET_ROOTFS_PARTSIZE=448
+CONFIG_ALL_KMODS=y
+CONFIG_TARGET_ROOTFS_DIR=""
+CONFIG_IB=y
+CONFIG_IB_STANDALONE=y
+CONFIG_PACKAGE_libip4tc=m
+CONFIG_PACKAGE_libip6tc=m
+CONFIG_PACKAGE_libiptext=m
+CONFIG_PACKAGE_libiptext6=m
+CONFIG_PACKAGE_libxtables=m
+CONFIG_PACKAGE_curl=m
+CONFIG_PACKAGE_ip6tables-nft=m
+CONFIG_PACKAGE_ip6tables-zz-legacy=m
+CONFIG_PACKAGE_iptables-nft=m
+CONFIG_PACKAGE_iptables-zz-legacy=m
+CONFIG_PACKAGE_xtables-legacy=m
+CONFIG_PACKAGE_xtables-nft=m
+--- kernel.bin 数（预期 > 0；target/linux/install 产出）---
+180
+build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/cudy_wr3000u-v1-kernel.bin
+build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/ruijie_rg-x60-pro-kernel.bin
+build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/smartrg_sdg-8734-kernel.bin
+build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/confiabits_mt7981-kernel.bin
+build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/acer_predator-w6d-kernel.bin
+--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---
+Image
+Image-initramfs
+abt_asr3000-kernel.bin
+acelink_ew-7886cax-kernel.bin
+acelink_ew-7886cax-kernel.bin.its
+acer_predator-w6-kernel.bin
+acer_predator-w6-kernel.bin.its
+acer_predator-w6d-kernel.bin
+acer_predator-w6d-kernel.bin.its
+acer_predator-w6x-stock-kernel.bin
+acer_predator-w6x-stock-kernel.bin.its
+acer_predator-w6x-ubootmod-kernel.bin
+acer_vero-w6m-kernel.bin
+acer_vero-w6m-kernel.bin.its
+airpi_ap3000m-kernel.bin
+airpi_ap3000m-kernel.bin.its
+airtel_aap4221zy-kernel.bin
+airtel_aap4221zy-kernel.bin.its
+arcadyan_mozart-kernel.bin
+asiarf_ap7986-003-kernel.bin
+--- bin/packages 关键包（core 仓库那批）---
+curl_8.23.0-r1_aarch64_cortex-a53.ipk
+--- Build 步 make 实际报错（末 80 行，ci-logs 失明时的唯一现场）---
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lxlfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.makeamitbin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.imagetag.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mksenaofw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.xmlwf.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cros-vbutil.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lsattr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.ext4.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bcm4908asus.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.findfs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkedimaximg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bcmblob.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2undo.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.libdeflate-gzip.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.ext2.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ptgen.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.addpattern.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ocspcheck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkh3cvfs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2freefrag.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2fsck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkbrnimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.npk_pack_kernel.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e4defrag.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lzma.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mktplinkfw2.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.oseama.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e4crypt.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.asustrx.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mcopy.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.wrt400n.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkzyxelzldfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkheader_gemtek.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.jshn.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.linksys-addfwhdr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fiptool.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdapimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.dgfirmware.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.unstrip.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.erofs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ubinize.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkbuffaloimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.sign_dlink_ru.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mktitanimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.trx.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.seama.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.osbridge-crc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkwrggimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.b43-asm.bin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.add_header.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.elflint.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.hcsmakeimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.opkg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cpio.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.fat.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdniimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkplanexfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkqdimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.chattr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2label.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.flock.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdlinkfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.locate.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfwimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.ext3.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zynsig.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdapimg2.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.openssl.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zycast.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.nec-usbatermfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.asusuimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bison.bin: executable
+(cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl; \
+	tar -I '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/zstd -T0 --ultra -20' -cf /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/bin/targets/mediatek/filogic/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64.tar.zst openwrt-imagebuilder-mediatek-filogic.Linux-x86_64 \
+	--mtime="Fri Sep 11 12:57:35 UTC 2026"; \
+)
+make[2]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/target/imagebuilder'
+time: target/imagebuilder/compile#189.73#2.43#103.72
+make[1]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt'
