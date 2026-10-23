@@ -110,12 +110,14 @@ jobs:
       # 三平台并行；fail-fast:false 让单个 target 失败不拖垮其余两个
       fail-fast: false
       matrix:
-        # push 触发时 inputs.targets 为空 → 回退到默认平台 JSON 数组
-        # （ipq60xx 于 2026-10-21 新增：qualcommax subtarget 在 7722054025 实测存在，
-        #  与 ipq807x 同 target 不同 subtarget，KERNEL_WERROR/variant 互斥等修复通用）
-        # ⚠️ 本临时分支 ci-filogic：run4 已验证 filogic 通过（tag ...-39897283747），
-        #  现改编其余三平台（ipq807x/ipq60xx/armv8）继续验证，凑齐最初的 4 平台 IB。
-        target: ${{ fromJson(inputs.targets || '["qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]') }}
+        # push 触发时 inputs.targets 为空 → 回退到默认平台 JSON 数组。
+        # ⚠️ 2026-10-24：本临时分支 ci-filogic 当前只编 filogic 做【修复验证】
+        #   （run4 的 filogic IB 实测缺 <device>-kernel.bin → 下游 jcg_q30-pro 拼 .itb 崩，
+        #    build (5).log 实锤）。其余三平台（ipq807x/ipq60xx/armv8）验证先暂停——
+        #    用户明确"其他平台任务可以停掉，因为还是有问题"，根因未解前验证它们没意义。
+        #   验证 filogic 修复通过后，把下面回退数组改回四平台再推一次即可。
+        #   （ipq60xx 于 2026-10-21 新增；与 ipq807x 同 target 不同 subtarget。）
+        target: ${{ fromJson(inputs.targets || '["mediatek/filogic"]') }}
     steps:
       - name: Show parameters
         env:
@@ -367,6 +369,23 @@ jobs:
               print("[imagebuilder/Makefile] !! 未匹配 SIGNATURE_CHECK 锚点"); sys.exit(1)
           PY
 
+      - name: Exclude openwrt_one device (IB build quirk)
+        # openwrt_one 的组合固件 artifact（nor/snand-preloader.bin 等）依赖 phony 目标
+        # `openwrt_one-images`，该目标只在【完整 image 构建上下文】定义、IB 构建期不定义 →
+        # `make target/linux/install` 崩在 "No rule to make target 'openwrt_one-images'"
+        # （run3 实锤 ci-logs run=39890290506，停在 target/linux/install Error 2）。
+        # openwrt_one 是开发板、不发货，从 filogic 的 TARGET_DEVICES 剔除即可绕开，
+        # 不影响任何真要发货的设备（jcg_q30-pro 等）的 kernel.bin 预置。
+        working-directory: openwrt
+        run: |
+          F=target/linux/mediatek/image/filogic.mk
+          if [ -f "$F" ] && grep -q 'TARGET_DEVICES += openwrt_one' "$F"; then
+            sed -i '/TARGET_DEVICES += openwrt_one/d' "$F"
+            echo "openwrt_one 已从 filogic TARGET_DEVICES 剔除（绕开 openwrt_one-images 坑）"
+          else
+            echo "openwrt_one 不在 filogic 设备列表或文件不存在，跳过（仅 filogic 有此设备）"
+          fi
+
       - name: Update and install feeds
         working-directory: openwrt
         run: |
@@ -583,22 +602,30 @@ jobs:
         working-directory: openwrt
         run: |
           # ⚠️ 单条 make 串整套 phase：tools→toolchain→target/compile(kernel)→package/compile
-          #    →package/install(填充 bin/packages)→target/imagebuilder/compile(打 IB 包)。
-          #    这是 run1（tag 39790910952，四平台全过）验证可用的写法。
-          #    ⚠️ 为什么绝不能拆出独立的 `make target/linux/install`：
-          #    openwrt_one 设备的 kernel 安装规则依赖 phony 目标 `openwrt_one-images`，
-          #    而它只在 **image 构建上下文** 定义、不在 install 上下文。独立 make 只加载
-          #    install 上下文 → "No rule to make target 'openwrt_one-images'" → 整步崩
-          #    （run3 实锤：ci-logs run=39890290506，停在 target/linux/install Error 2）。
-          #    单条 make 内 image 上下文始终加载，不会触发该错；且上游 filogic IB 本就
-          #    在运行期现编内核（image_prepare 从捆绑的 linux 源码树编译 vmlinux→fit），
-          #    不需要预置 <device>-kernel.bin（见下方观测说明 + Self-check 步的注释）。
+          #    →package/install(填充 bin/packages)→target/linux/install(产 <device>-kernel.bin)
+          #    →target/imagebuilder/compile(打 IB 包)。这是 run1 风格的单条 make；但 run1/run4
+          #    漏了 **target/linux/install** 这一环 → IB 内 0 个 kernel.bin → 下游 jcg_q30-pro
+          #    拼 .itb 崩（build (5).log 实锤：No rule to make target '.../jcg_q30-pro-kernel.bin'）。
+          #    ⚠️⚠️ 为什么必须含 target/linux/install（run4 漏它 → 0 kernel.bin）：
+          #    include/image.mk 的 Device/Build/kernel 在 `ifndef IB` + `ifdef CONFIG_IB` 下把每个
+          #    设备的 $(KDIR_KERNEL_IMAGE)（即 <device>-kernel.bin）挂到 `install` 目标（image.mk:755）；
+          #    target/imagebuilder/Makefile:112 再用 `-cp $(KERNEL_BUILD_DIR)/* $(IB_KDIR)/` 把这些
+          #    kernel.bin 打进 IB。
+          #    ↑ 这条链**只在构建 IB 时（IB 未置）**生效；IB 运行期 IB=1 会把整段 `ifndef IB`
+          #    （image.mk:753）屏蔽，运行期根本没有现编内核的规则——kernel.bin 必须构建期预置，
+          #    否则任何 .itb 设备组装必崩。早先（fd6c47c→a68cf5a）撤掉该步是**错误方向**。
+          #    ⚠️ openwrt_one 坑（run3 实锤 ci-logs run=39890290506）：openwrt_one 的组合固件
+          #    artifact 依赖 phony `openwrt_one-images`（只在完整 image 构建上下文定义、IB 构建期
+          #    不定义）→ 独立 `make target/linux/install` 崩在该目标。我们已在「Exclude openwrt_one」
+          #    步把它从 filogic TARGET_DEVICES 剔除（开发板、不发货），绕开该坑且不影响真要发货的
+          #    设备（jcg_q30-pro 等）的 kernel.bin 预置。
           # ⚠️⚠️ 2026-10-24：用 { … } 2>&1 | tee /tmp/build.log 把完整 make 输出落盘。
           #    GH 默认 shell 已带 -o pipefail，make 真实退出码仍能触发本步失败；
           #    同时 /tmp/build.log 供失败时的 Dump 步抓取——否则 ci-logs 一旦失明，
           #    我们连 make 报什么错都看不到（这正是 run2 失明的原因）。
           { make -j$(nproc) tools/install toolchain/install target/compile \
-                          package/compile package/install target/imagebuilder/compile V=s
+                          package/compile package/install target/linux/install \
+                          target/imagebuilder/compile V=s
           } 2>&1 | tee /tmp/build.log
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
           echo "--- bin/packages 是否含 kmod（抽查）---"
@@ -795,19 +822,26 @@ jobs:
           fi
           echo "核心用户态链 17 项全部在 IB 内 ✓"
           echo ""
-          # ⚠️⚠️ <device>-kernel.bin 检查（2026-10-23 写入，2026-10-24 修正为仅观测）：
-          #   原逻辑：IB 必须内嵌 <device>-kernel.bin，否则下游 make image 运行期 IB=1 时
-          #   image.mk 的 kernel.bin 规则被 `ifndef IB` 屏蔽 → "No rule to make target …" 崩。
-          #   但经核对上游 openwrt-25.12 源码：mediatek / qualcommax / rockchip **四个 target
-          #   没有任何设备设 KERNEL_INSTALL**（grep 全树仅 armsr/at91/imx/ipq40xx 有）。
-          #   故这些 IB 合法地、必然地含 0 个 kernel.bin——内核在 make image 运行期由
-          #   image_prepare 从源码现编（vmlinux → lzma → fit），并不需要预置 kernel.bin。
-          #   → 原门禁对上游 IB 永远误报，已改为【仅观测、不阻断】。
-          #   下游 vm_ib.sh 才是逐设备 kernel 需求的权威（它针对注入 KERNEL_INSTALL 设备的场景）。
-          echo "--- 逐机型 kernel.bin 计数（上游 target 合法为 0；仅观测，不阻断）---"
+          # ⚠️⚠️ <device>-kernel.bin 硬门禁（2026-10-24 由"仅观测"改为硬门禁）：
+          #   早先误判"上游 IB 合法含 0 个 kernel.bin、运行期现编内核"——这是**错的**。
+          #   build (5).log 实锤：下游 make image 运行期 IB=1 时，image.mk 的
+          #   $(KDIR_KERNEL_IMAGE) 规则被 `ifndef IB`（image.mk:753）整段屏蔽，根本
+          #   没有现编内核的规则，只能依赖 IB 预置的 <device>-kernel.bin。
+          #   预置来自构建期：image.mk:755（ifndef IB+ifdef CONFIG_IB → `install: <dev>-kernel.bin`）
+          #   + 本步已含的 target/linux/install 实跑 + imagebuilder/Makefile:112
+          #   （`-cp $(KERNEL_BUILD_DIR)/* $(IB_KDIR)/`）。run4 漏掉 target/linux/install
+          #   → 0 个 kernel.bin → 下游 .itb 设备必崩。故本门禁现在**硬性**：IB 内
+          #   kernel.bin 必须 > 0，否则拒绝发布（grep 全树：mediatek/qualcommax/rockchip
+          #   虽无 KERNEL_INSTALL 设备，但 CONFIG_IB 构建路径仍会为所有设备产 kernel.bin）。
+          echo "--- 逐机型 kernel.bin 计数（硬门禁：必须 > 0）---"
           KB=$(tar -tf "$IB" | grep -cE 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' || true)
-          echo "kernel.bin 数 = $KB（上游 target 无 KERNEL_INSTALL 设备时为 0，属正常）"
-          tar -tf "$IB" | grep -E 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' | head -3 || true
+          echo "kernel.bin 数 = $KB"
+          tar -tf "$IB" | grep -E 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' | head -5 || true
+          if [ "$KB" -eq 0 ]; then
+            echo "::error::IB 内 0 个 <device>-kernel.bin —— 构建期漏跑 target/linux/install 或 openwrt_one 坑未绕开，下游 .itb 设备组装必崩，拒绝发布"
+            exit 1
+          fi
+          echo "kernel.bin 校验通过 ✓（IB 已预置逐设备内核）"
           echo ""
           # ⚠️⚠️ owai 依赖、但 owai 四流实测 0 命中的 core 包（必须 IB 本地出，
           #   详见 Generate .config 里的注释）。缺它们 firewall4 / passwall2 等装不上。
@@ -886,7 +920,7 @@ jobs:
             echo "--- .config 关键项 ---"
             grep -E '^(CONFIG_TARGET_ROOTFS|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_ALL_KMODS)' .config 2>/dev/null
             grep -E '^CONFIG_PACKAGE_(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables|libip4tc|libip6tc|libiptext6|libiptext|xtables-legacy|xtables-nft)=' .config 2>/dev/null
-            echo "--- kernel.bin 数（上游 target 合法为 0；仅观测）---"
+            echo "--- kernel.bin 数（预期 > 0；target/linux/install 产出）---"
             find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' 2>/dev/null | wc -l
             find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' 2>/dev/null | head -5
             echo "--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---"
