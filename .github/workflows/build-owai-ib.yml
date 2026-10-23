@@ -520,6 +520,36 @@ jobs:
             #   没有可用根文件系统格式 → 组装必崩。改回 run1 写法：保留默认 rootfs
             #   （squashfs 等），只跑 target/imagebuilder/compile 打 IB 包，不编全套固件镜像。
           } >> .config
+          # ⚠️⚠️ filogic bootloader 全量显式选中（2026-10-24 新增，build (6).log 实锤）：
+          #   IB 运行期用 Build/mt7981-bl31-uboot / Build/mt7981-bl2 拼
+          #   bl31-uboot.fip 与 preloader.bin 时，要 cat 两份 staged 件：
+          #     staging_dir/.../image/mt7981_<dev>-u-boot.fip   ← uboot-mediatek 设备变体
+          #     staging_dir/.../image/<tfa-variant>-bl2.img     ← arm-trusted-firmware-mediatek 设备变体
+          #   这两类变体在 u-boot.mk / trusted-firmware-a.mk 里 HIDDEN:=1 且 DEFAULT 只在
+          #   「设备 profile 被选中」时成立（u-boot.mk:100-104：DEFAULT:=y if
+          #   (TARGET_DEP_Default || TARGET_DEP_DEVICE_<dev>)）。我们只选了 subtarget，
+          #   没选任何设备 profile → 全部 bootloader 变体都没编 → STAGING_DIR_IMAGE 空 →
+          #   拷贝进 IB 后运行期 `cat .../mt7981_jcg_q30-pro-u-boot.fip` 报 No such file →
+          #   make[3] Error 1（build (6).log line 1821-1825 实锤）。
+          #   修法：直接把 filogic 的全部 uboot / TFA 设备变体强制 =y（hidden 包强制选合法；
+          #   uboot 变体的 DEPENDS:=+trusted-firmware-a-<x> 会连带拉入对应 TFA 变体），
+          #   覆盖每个设备的 FIP 与 preloader 来源。
+          #   ⚠️ 不靠选设备 profile（CONFIG_TARGET_DEVICE_*=y）：那样会经 DEVICE_PACKAGES
+          #   额外拉一批包、还可能搅动 dnsmasq/iptables 的精细互斥处理；本步只补 bootloader。
+          #   kernel.bin 已由 Build 步的 target/linux/install 覆盖（run6 已验证），此处不动。
+          _owai_pick_bl() {
+            local mk="$1" prefix="$2"
+            awk '
+              /^define (U-Boot|Trusted-Firmware-A)\// { n=$2; f=0; next }
+              /BUILD_SUBTARGET:=filogic/ { if (n!="") f=1; next }
+              /^endef/ { if (n!="" && f==1) print n; n=""; next }
+            ' "$mk" | while read -r v; do
+              echo "CONFIG_PACKAGE_${prefix}${v}=y"
+            done
+          }
+          _owai_pick_bl package/boot/uboot-mediatek/Makefile uboot-mediatek- >> .config
+          _owai_pick_bl package/boot/arm-trusted-firmware-mediatek/Makefile trusted-firmware-a- >> .config
+          echo "filogic bootloader 变体已追加（uboot + TFA，覆盖全部设备的 FIP/preloader）"
           make defconfig
           # ⚠️⚠️ post-defconfig：dnsmasq variant 互斥（2026-10-20 run 39413072738 实锤）：
           #   dnsmasq 包有三个 variant（package/network/services/dnsmasq/Makefile）：
@@ -842,6 +872,40 @@ jobs:
             exit 1
           fi
           echo "kernel.bin 校验通过 ✓（IB 已预置逐设备内核）"
+          echo ""
+          # ⚠️⚠️ U-Boot FIP / TFA bl2 硬门禁（2026-10-24 新增，build (6).log 实锤）：
+          #   IB 运行期 Build/mt7981-bl31-uboot 会 `cat $(STAGING_DIR_IMAGE)/mt7981_<dev>-u-boot.fip`
+          #   拼 bl31-uboot.fip；Build/mt7981-bl2 拼 preloader.bin 要 <tfa-variant>-bl2.img。
+          #   这两类件只由 uboot-mediatek / arm-trusted-firmware-mediatek 的 filogic 设备变体
+          #   编出（HIDDEN+DEFAULT 仅随设备 profile 选中，故 Generate .config 步已显式 =y）。
+          #   若漏选 → STAGING_DIR_IMAGE 无件 → imagebuilder/Makefile:136 拷贝后 IB 仍缺 →
+          #   下游 jcg_q30-pro 组装 `cat .../mt7981_jcg_q30-pro-u-boot.fip` No such file → Error 1。
+          #   （FIP 由 uboot-mediatek Build/InstallDev:1515 命名 $(BUILD_VARIANT)-u-boot.fip；
+          #    bl2 由 TFA Package/install:819 命名 $(BUILD_VARIANT)-bl2.img。）
+          echo "--- U-Boot FIP / TFA bl2 断言（硬门禁）---"
+          FIP=$(tar -tf "$IB" | grep -cE 'staging_dir/target-[^/]+/image/[^/]+-u-boot\.fip$' || true)
+          BL2=$(tar -tf "$IB" | grep -cE 'staging_dir/target-[^/]+/image/[^/]+-bl2\.img$' || true)
+          echo "u-boot.fip 数 = $FIP"
+          echo "bl2.img 数    = $BL2"
+          tar -tf "$IB" | grep -E 'staging_dir/target-[^/]+/image/mt7981_jcg_q30-pro-u-boot\.fip$' || true
+          tar -tf "$IB" | grep -E 'staging_dir/target-[^/]+/image/mt7981-spim-nand-ddr3-bl2\.img$' || true
+          if [ "$FIP" -eq 0 ]; then
+            echo "::error::IB 内 0 个 *-u-boot.fip —— filogic bootloader 变体未编出，下游所有 mt798x 设备组装必崩，拒绝发布"
+            exit 1
+          fi
+          if [ "$BL2" -eq 0 ]; then
+            echo "::error::IB 内 0 个 *-bl2.img —— TFA bl2 未编出，下游所有 mt798x 设备 preloader 必缺，拒绝发布"
+            exit 1
+          fi
+          if ! tar -tf "$IB" | grep -qE 'staging_dir/target-[^/]+/image/mt7981_jcg_q30-pro-u-boot\.fip$'; then
+            echo "::error::IB 缺 mt7981_jcg_q30-pro-u-boot.fip —— jcg_q30-pro 组装必崩，拒绝发布"
+            exit 1
+          fi
+          if ! tar -tf "$IB" | grep -qE 'staging_dir/target-[^/]+/image/mt7981-spim-nand-ddr3-bl2\.img$'; then
+            echo "::error::IB 缺 mt7981-spim-nand-ddr3-bl2.img —— jcg_q30-pro preloader 源缺失，组装必崩，拒绝发布"
+            exit 1
+          fi
+          echo "U-Boot FIP / TFA bl2 校验通过 ✓（IB 已预置 filogic 全设备 bootloader）"
           echo ""
           # ⚠️⚠️ owai 依赖、但 owai 四流实测 0 命中的 core 包（必须 IB 本地出，
           #   详见 Generate .config 里的注释）。缺它们 firewall4 / passwall2 等装不上。
