@@ -1,5 +1,13 @@
 name: Build OWAI-aligned ImageBuilder
 
+# ⚠️ ci-filogic 是临时 scratch 分支，每次推送都触发新 run。加 concurrency 让新推送
+#   自动 cancel 仍在跑的旧 run（cancel-in-progress），避免修一个小 bug 也要等旧 run
+#   空跑 2-4h 还失败（2026-10-24 实锤：f4133e5 的 awk 取错变体名，靠 run8 修，
+#   靠本组 cancel 掉误触发的 run7）。
+concurrency:
+  group: ci-filogic-${{ github.ref }}
+  cancel-in-progress: true
+
 # 参考 kiddin9/Kwrt 的仓库结构，但目标不同：
 #   Kwrt  = 编固件（openwrt/openwrt@openwrt-25.12 + 自家 op-packages feed，默认 APK）
 #   本工作流 = 只编 **ImageBuilder**，并刻意保持 **opkg**（不与 owai 同格式就废了）
@@ -540,7 +548,7 @@ jobs:
           _owai_pick_bl() {
             local mk="$1" prefix="$2"
             awk '
-              /^define (U-Boot|Trusted-Firmware-A)\// { n=$2; f=0; next }
+              /^define (U-Boot|Trusted-Firmware-A)\// { n=$2; sub(/^[^/]+\//,"",n); f=0; next }
               /BUILD_SUBTARGET:=filogic/ { if (n!="") f=1; next }
               /^endef/ { if (n!="" && f==1) print n; n=""; next }
             ' "$mk" | while read -r v; do
