@@ -110,11 +110,12 @@ jobs:
       # 三平台并行；fail-fast:false 让单个 target 失败不拖垮其余两个
       fail-fast: false
       matrix:
-        # push 触发时 inputs.targets 为空 → 回退到默认四平台 JSON 数组
+        # push 触发时 inputs.targets 为空 → 回退到默认平台 JSON 数组
         # （ipq60xx 于 2026-10-21 新增：qualcommax subtarget 在 7722054025 实测存在，
         #  与 ipq807x 同 target 不同 subtarget，KERNEL_WERROR/variant 互斥等修复通用）
-        # ⚠️ 本临时分支 ci-filogic 上只编 filogic 一个平台（先验证修复，省一半时间）
-        target: ${{ fromJson(inputs.targets || '["mediatek/filogic"]') }}
+        # ⚠️ 本临时分支 ci-filogic：run4 已验证 filogic 通过（tag ...-39897283747），
+        #  现改编其余三平台（ipq807x/ipq60xx/armv8）继续验证，凑齐最初的 4 平台 IB。
+        target: ${{ fromJson(inputs.targets || '["qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]') }}
     steps:
       - name: Show parameters
         env:
@@ -930,6 +931,9 @@ jobs:
           #   - TARGET_SAFE 已在首个 step 把 "/" 换成 "-"（Git tag 禁 "/"，且 replace() 不是合法 GH 函数）；
           #   - VERSION_NUMBER 必须用 env（push 触发时 inputs.version_number 为空，
           #     env 已回退 '25.12-owai'，否则 tag 会残缺成 ib--mediatek-...）。
+          #   - commitish 显式指向本次运行的提交（github.sha），否则 action 会把 tag
+          #     打到默认分支 HEAD（main），丢失 CI 代码溯源（run4 实锤 tag 误指 main）。
+          commitish: ${{ github.sha }}
           tag_name: ib-${{ env.VERSION_NUMBER }}-${{ env.TARGET_SAFE }}-${{ github.run_id }}
           name: OWAI-aligned ImageBuilder ${{ matrix.target }} ${{ env.VERSION_NUMBER }}
           files: |
