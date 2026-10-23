@@ -494,16 +494,11 @@ jobs:
                      iptables-mod-socket iptables-mod-tproxy ip6tables-mod-nat; do
               echo "CONFIG_PACKAGE_${p}=m"
             done
-            # ⚠️⚠️ 关闭 rootfs（2026-10-23 新增）：本流程真正需要的只是 <device>-kernel.bin
-            #   （IB 组装 make image 必需，见 Build 步注释）。全部关掉后 install-images 的
-            #   $(KDIR)/root.* 前置为空 → install 退化成「kernel_prepare + 逐机型 kernel.bin」，
-            #   不再编全套固件镜像：省时间，也避免小闪存机型 IMAGE_SIZE 超限把整个 job 挂掉。
-            echo "# CONFIG_TARGET_ROOTFS_SQUASHFS is not set"
-            echo "# CONFIG_TARGET_ROOTFS_EXT4FS is not set"
-            echo "# CONFIG_TARGET_ROOTFS_JFFS2 is not set"
-            echo "# CONFIG_TARGET_ROOTFS_UBIFS is not set"
-            echo "# CONFIG_TARGET_ROOTFS_TARGZ is not set"
-            echo "# CONFIG_TARGET_ROOTFS_CPIOGZ is not set"
+            # ⚠️ 不再关闭 rootfs（撤销 fd6c47c 的关 rootfs 块）：
+            #   原关 rootfs 仅为让独立的 `make target/linux/install` 退化成只产 kernel.bin；
+            #   现在已撤掉该独立步（见 Build 步），关 rootfs 反而会让 IB 运行期 make image
+            #   没有可用根文件系统格式 → 组装必崩。改回 run1 写法：保留默认 rootfs
+            #   （squashfs 等），只跑 target/imagebuilder/compile 打 IB 包，不编全套固件镜像。
           } >> .config
           make defconfig
           # ⚠️⚠️ post-defconfig：dnsmasq variant 互斥（2026-10-20 run 39413072738 实锤）：
@@ -583,26 +578,31 @@ jobs:
       #      IB 打包靠 `-cp $(KERNEL_BUILD_DIR)/* $(IB_KDIR)/` 把这些文件带进 IB，
       #      没跑 install 就是一个都没有 → 任何机型组装都在最后一步崩。
       # ------------------------------------------------------------------
-      - name: Build toolchain, kernel, all packages, kernel images, then ImageBuilder
+      - name: Build toolchain, kernel, all packages, then ImageBuilder
         working-directory: openwrt
         run: |
-          # ⚠️ 分三条 make：goal 之间在 -j 下是**可以并行**的（make 不保证左到右串行），
-          #    若把 target/linux/install 与 target/imagebuilder/compile 写在同一条命令里，
-          #    IB 打包可能抢在 kernel.bin 产出之前跑完 → 打进 IB 的还是 0 个 kernel.bin。
-          #    显式拆成三条，顺序就有保障了。
+          # ⚠️ 单条 make 串整套 phase：tools→toolchain→target/compile(kernel)→package/compile
+          #    →package/install(填充 bin/packages)→target/imagebuilder/compile(打 IB 包)。
+          #    这是 run1（tag 39790910952，四平台全过）验证可用的写法。
+          #    ⚠️ 为什么绝不能拆出独立的 `make target/linux/install`：
+          #    openwrt_one 设备的 kernel 安装规则依赖 phony 目标 `openwrt_one-images`，
+          #    而它只在 **image 构建上下文** 定义、不在 install 上下文。独立 make 只加载
+          #    install 上下文 → "No rule to make target 'openwrt_one-images'" → 整步崩
+          #    （run3 实锤：ci-logs run=39890290506，停在 target/linux/install Error 2）。
+          #    单条 make 内 image 上下文始终加载，不会触发该错；且上游 filogic IB 本就
+          #    在运行期现编内核（image_prepare 从捆绑的 linux 源码树编译 vmlinux→fit），
+          #    不需要预置 <device>-kernel.bin（见下方观测说明 + Self-check 步的注释）。
           # ⚠️⚠️ 2026-10-24：用 { … } 2>&1 | tee /tmp/build.log 把完整 make 输出落盘。
-          #    GH 默认 shell 已带 -o pipefail，所以 make 真实退出码仍能触发本步失败；
+          #    GH 默认 shell 已带 -o pipefail，make 真实退出码仍能触发本步失败；
           #    同时 /tmp/build.log 供失败时的 Dump 步抓取——否则 ci-logs 一旦失明，
           #    我们连 make 报什么错都看不到（这正是 run2 失明的原因）。
           { make -j$(nproc) tools/install toolchain/install target/compile \
-                          package/compile package/install V=s
-            make -j$(nproc) target/linux/install V=s
-            make -j$(nproc) target/imagebuilder/compile V=s
+                          package/compile package/install target/imagebuilder/compile V=s
           } 2>&1 | tee /tmp/build.log
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
-          echo "--- <device>-kernel.bin 数量（上游 target 无 KERNEL_INSTALL，合法为 0；仅观测）---"
+          echo "--- <device>-kernel.bin 数量（上游 filogic 无 KERNEL_INSTALL 设备，合法为 0；仅观测）---"
           find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | wc -l
           find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | head -5
 
@@ -794,10 +794,7 @@ jobs:
           fi
           echo "核心用户态链 17 项全部在 IB 内 ✓"
           echo ""
-          # ⚠️⚠️ <device>-kernel.bin 硬门禁（2026-10-23 实锤，同上 build (4).log）：
-          #   IB 里没有这些文件 → 下游 assembler `make image` 末段
-          #   "No rule to make target '.../<device>-kernel.bin'" → 任何机型都组装不出来。
-          # ⚠️⚠️ <device>-kernel.bin 检查（2026-10-23 写入，2026-10-24 修正）：
+          # ⚠️⚠️ <device>-kernel.bin 检查（2026-10-23 写入，2026-10-24 修正为仅观测）：
           #   原逻辑：IB 必须内嵌 <device>-kernel.bin，否则下游 make image 运行期 IB=1 时
           #   image.mk 的 kernel.bin 规则被 `ifndef IB` 屏蔽 → "No rule to make target …" 崩。
           #   但经核对上游 openwrt-25.12 源码：mediatek / qualcommax / rockchip **四个 target
