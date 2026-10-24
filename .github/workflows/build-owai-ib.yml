@@ -552,12 +552,23 @@ jobs:
               /BUILD_SUBTARGET:=filogic/ { if (n!="") f=1; next }
               /^endef/ { if (n!="" && f==1) print n; n=""; next }
             ' "$mk" | while read -r v; do
-              echo "CONFIG_PACKAGE_${prefix}${v}=y"
+              # ⚠️⚠️ 2026-10-24 修 run7/run8 连败根因（此前写的是全树零命中的无效符号）：
+              #   uboot 变体真实包名 = `u-boot-<variant>`（include/u-boot.mk:91
+              #   `define Package/u-boot-$(1)` → 符号 CONFIG_PACKAGE_u-boot-<variant>）。
+              #   此前误写 `uboot-mediatek-<variant>`（全树零命中=无效符号）→ make defconfig
+              #   静默丢弃 → 设备 FIP 一个没编 → 卡 jcg FIP 门禁（run7/run8 实锤）。
+              #   TFA 前缀 `trusted-firmware-a-` 经 DEPENDS:=+trusted-firmware-a-... 实证正确。
+              # ⚠️ 只选 mt7981 家族：assembler 当前 filogic 只建 jcg_q30-pro(mt7981)；
+              #   全量 94 个 uboot 变体（mt7981×49/7986×20/7987×8/7988×17）会把构建推向
+              #   6h 上限 + 引入个别变体编译风险。需要 mt7986/7/8 时把下面 case 家放开。
+              case "$v" in
+                mt7981*) echo "CONFIG_PACKAGE_${prefix}${v}=y" ;;
+              esac
             done
           }
-          _owai_pick_bl package/boot/uboot-mediatek/Makefile uboot-mediatek- >> .config
+          _owai_pick_bl package/boot/uboot-mediatek/Makefile u-boot- >> .config
           _owai_pick_bl package/boot/arm-trusted-firmware-mediatek/Makefile trusted-firmware-a- >> .config
-          echo "filogic bootloader 变体已追加（uboot + TFA，覆盖全部设备的 FIP/preloader）"
+          echo "filogic bootloader 变体已追加（mt7981 家族；uboot=u-boot-* / TFA=trusted-firmware-a-*，覆盖 jcg_q30-pro 等 FIP/preloader）"
           make defconfig
           # ⚠️⚠️ post-defconfig：dnsmasq variant 互斥（2026-10-20 run 39413072738 实锤）：
           #   dnsmasq 包有三个 variant（package/network/services/dnsmasq/Makefile）：
@@ -1003,6 +1014,20 @@ jobs:
             find bin/packages -name '*.ipk' -printf '%f\n' 2>/dev/null \
               | grep -E '^(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables12|libip4tc2|libip6tc2|libiptext0|libiptext6-0)' \
               | head -20
+            echo "--- filogic bootloader config 符号（mt7981 =y 行数 + jcg 样本）---"
+            grep -cE '^CONFIG_PACKAGE_(u-boot|trusted-firmware-a)-mt7981' .config 2>/dev/null
+            grep -E '^CONFIG_PACKAGE_u-boot-mt7981_jcg_q30-pro=|^CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=' .config 2>/dev/null || echo "(!! jcg uboot/tfa =y 缺失 → bootloader 前缀/过滤又错了)"
+            echo "--- IB 内 FIP/bl2 清单 + jcg 精确判定（诊断 FIP 门禁的根因现场）---"
+            IBDUMP=$(ls bin/targets/*/*/*imagebuilder*.tar.zst 2>/dev/null | head -1)
+            if [ -n "$IBDUMP" ]; then
+              echo "IB=$IBDUMP"
+              echo "FIP 总数 = $(tar -tf "$IBDUMP" | grep -cE 'image/[^/]+-u-boot\.fip$' || true)"
+              echo "bl2 总数 = $(tar -tf "$IBDUMP" | grep -cE 'image/[^/]+-bl2\.img$' || true)"
+              echo "jcg FIP / bl2 精确判定:"
+              tar -tf "$IBDUMP" | grep -E 'image/mt7981_jcg_q30-pro-u-boot\.fip$|image/mt7981-spim-nand-ddr3-bl2\.img$' || echo "(!! 缺 jcg FIP 或 bl2 → 即 FIP 门禁失败根因)"
+            else
+              echo "(未找到 IB tar.zst)"
+            fi
             echo "--- Build 步 make 实际报错（末 80 行，ci-logs 失明时的唯一现场）---"
             tail -80 /tmp/build.log 2>/dev/null || echo "(无 /tmp/build.log)"
           } > /tmp/diag.txt 2>&1
