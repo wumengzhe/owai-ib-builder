@@ -557,16 +557,17 @@ jobs:
             #     + 追加 =y；且调用点必须放在本步所有 make defconfig 之后（见下方 dnsmasq 块之后）。
             #     构建读 .config 原样采用（toplevel.mk:94 对含 CONFIG_HAVE_DOT_CONFIG 的 .config
             #     是 no-op，不重跑 conf）；即便触发 oldconfig 也会保留显式 =y（只 defconfig 丢）。
-            #   ⚠️ 只选 mt7981 家族：assembler 当前 filogic 只建 jcg_q30-pro(mt7981)；
-            #     全量 94 个 uboot 变体（mt7981×49/7986×20/7987×8/7988×17）会把构建推向
-            #     6h 上限 + 引入个别变体编译风险。需要 mt7986/7/8 时把下面 case 家放开。
+            #   ⚠️ 2026-10-24 run11：全 SoC 覆盖（用户决策"最终目标=全 SoC 通用 IB"，对标 openwrt.ai）。
+            #     run10 已用 mt7981 家族验证 post-defconfig 机制通过，故去掉 SoC 过滤，选全部
+            #     filogic 变体（uboot 全 4 SoC + TFA 全显式——post-defconfig 不重跑 config，
+            #     DEPENDS 的 select 不解析，必须显式选 TFA）。openwrt.ai 的 IB 即全 SoC(80 FIP)。
+            #     构建预估 ~4h（6h 上限内）；run9 已实证 65 个 TFA 全编过。
             local mk="$1" prefix="$2" v sym
             for v in $(awk '
               /^define (U-Boot|Trusted-Firmware-A)\// { n=$2; sub(/^[^/]+\//,"",n); f=0; next }
               /BUILD_SUBTARGET:=filogic/ { if (n!="") f=1; next }
               /^endef/ { if (n!="" && f==1) print n; n=""; next }
             ' "$mk"); do
-              case "$v" in mt7981*) ;; *) continue ;; esac
               sym="${prefix}${v}"
               sed -i "/^CONFIG_PACKAGE_${sym}=/d;/^# CONFIG_PACKAGE_${sym} is not set/d" .config
               echo "CONFIG_PACKAGE_${sym}=y" >> .config
@@ -605,11 +606,11 @@ jobs:
           #   bl2 要 <tfa>-bl2.img；这些 HIDDEN 变体只在「设备 profile 选中」时 DEFAULT=y，我们只选
           #   subtarget → 不编 → 缺 FIP（build (6).log 实锤 cat No such file）。
           #   _owai_pick_bl 直接改写 .config（sed 删旧行 + 追加 =y），绕过 defconfig 的丢弃；
-          #   mt7981 家族覆盖 jcg_q30-pro 等全部 mt7981 filogic 设备的 FIP/preloader。
+          #   全 SoC 覆盖（mt7981/7986/7987/7988）全部 filogic 设备的 FIP/preloader，对标 openwrt.ai。
           _owai_pick_bl package/boot/uboot-mediatek/Makefile u-boot-
           _owai_pick_bl package/boot/arm-trusted-firmware-mediatek/Makefile trusted-firmware-a-
           echo "--- bootloader =y（defconfig 之后强制选中）存活校验 ---"
-          echo "mt7981 uboot/tfa =y 行数（预期 ≈66）: $(grep -cE '^CONFIG_PACKAGE_(u-boot|trusted-firmware-a)-mt7981' .config)"
+          echo "全 SoC(mt798x) uboot/tfa =y 行数（预期 ~140+）: $(grep -cE '^CONFIG_PACKAGE_(u-boot|trusted-firmware-a)-mt798' .config)"
           grep -qE '^CONFIG_PACKAGE_u-boot-mt7981_jcg_q30-pro=y' .config && echo "  ✓ jcg uboot =y 在 .config" || echo "  ✗✗ jcg uboot =y 缺失（强制选中失败）"
           grep -qE '^CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=y' .config && echo "  ✓ jcg tfa =y 在 .config" || echo "  ✗✗ jcg tfa =y 缺失"
           echo "--- 生效的关键配置 ---"
