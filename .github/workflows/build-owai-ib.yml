@@ -114,6 +114,16 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # ⚠️⚠️ 2026-10-25 实锤补：此前未设 timeout-minutes → 用 GitHub 默认 360 分钟硬上限。
+    #    全 SoC filogic（~145 个 uboot+ATF 变体）实测 3h08m，四平台并行时一旦某个
+    #    job 越过 6h，runner 会把它置为 **cancelled**（不是 failure）→
+    #    ① 没有 tag 产出 ② `if: failure()` 的 Dump 步不触发 → 本机彻底失明，
+    #    只能看到「8 小时过去、无 tag、ci-logs 未动」这种无信息量的状态（run12 现场）。
+    #    设为 330（5.5h）：正常构建 3h 有余量；真超时则由 GH 判 failure → 触发 Dump
+    #    诊断，/tmp/build.log 末 80 行能带回现场，可定位是卡在哪个包。
+    #    ⚠️ 另注意 GitHub Free 私有仓配额 2000 分钟/月：四平台一次约 700+ 分钟，
+    #    配额耗尽时 job 会**排队不启动**（同样无 tag、无日志），需到 Actions 页面确认。
+    timeout-minutes: 330
     strategy:
       # 三平台并行；fail-fast:false 让单个 target 失败不拖垮其余两个
       fail-fast: false
@@ -1023,12 +1033,21 @@ jobs:
       #    ⚠️ 绝不能推回 ci-filogic（那会又触发一次 workflow → 死循环），所以用独立分支。
       #    ci-logs 是临时分支，整轮修完会连同 ci-filogic 一起删掉。
       - name: Dump diagnostics to ci-logs branch (on failure)
-        if: failure()
+        # ⚠️ 2026-10-25 补 `|| cancelled()`：job 被取消（6h runner 硬上限 / 手工 cancel /
+        #    concurrency cancel-in-progress 抢跑）时状态是 **cancelled 而非 failure**，
+        #    只写 failure() 会让这些情况全部失明——run12「8h 无 tag 且 ci-logs 不动」
+        #    正是撞在这上面。加上 cancelled 后，无论超时还是被抢跑都能带回现场。
+        if: failure() || cancelled()
         working-directory: openwrt
         continue-on-error: true
         run: |
           {
             echo "run=${{ github.run_id }} attempt=${{ github.run_attempt }} target=$TARGET"
+            echo "job_status=${{ job.status }}"
+            echo "--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，"
+            echo "    而非编译失败。常见三因：① 超 timeout-minutes(330m) ② 6h runner 硬上限"
+            echo "    ③ concurrency cancel-in-progress（同一分支新推送抢跑）"
+            echo "    ④ GitHub Free 私有仓月度配额(2000min)耗尽 → job 排队未启动（日志会是空的）"
             echo "--- .config 关键项 ---"
             grep -E '^(CONFIG_TARGET_ROOTFS|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_ALL_KMODS)' .config 2>/dev/null
             grep -E '^CONFIG_PACKAGE_(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables|libip4tc|libip6tc|libiptext6|libiptext|xtables-legacy|xtables-nft)=' .config 2>/dev/null
