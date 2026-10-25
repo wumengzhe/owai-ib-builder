@@ -1082,11 +1082,16 @@ jobs:
         #    concurrency cancel-in-progress 抢跑）时状态是 **cancelled 而非 failure**，
         #    只写 failure() 会让这些情况全部失明——run12「8h 无 tag 且 ci-logs 不动」
         #    正是撞在这上面。加上 cancelled 后，无论超时还是被抢跑都能带回现场。
+        # ⚠️⚠️ 2026-10-25 二次修（run14 失明根因）：**绝不能用 working-directory: openwrt**！
+        #    若 Clone 步失败导致 openwrt 目录不存在，GitHub 会让本 step 因「目录不存在」
+        #    直接失败，再被 continue-on-error 静默吞掉 → 诊断命令（含最后的 git push
+        #    ci-logs）压根不执行 → ci-logs 永远不变 → 本机彻底失明（run14 现场就是这么
+        #    来的）。改为脚本内 `cd openwrt`（容错），即使目录不存在也能把 git push 跑完。
         if: failure() || cancelled()
-        working-directory: openwrt
         continue-on-error: true
         run: |
           {
+            cd openwrt 2>/dev/null || cd .
             echo "run=${{ github.run_id }} attempt=${{ github.run_attempt }} target=$TARGET"
             echo "job_status=${{ job.status }}"
             echo "--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，"
