@@ -1147,23 +1147,41 @@ jobs:
           } > /tmp/diag.txt 2>&1
           cat /tmp/diag.txt
           D=/tmp/cilog; rm -rf "$D"
-          # ⚠️⚠️ 2026-10-25 改：每个平台失败诊断推到【独立 ref】refs/heads/ci-logs-runs/<run_id>-<target>。
-          #    彻底消除四平台并行失败时「depth-1 clone 同基 → 后者 non-fast-forward 被 continue-on-error 吞」
-          #    的并发失明（run14/run15 监控失明根因之一）。独立 ref 互不冲突、必落盘；本机 git ls-remote 必见。
-          #    （旧的单一 ci-logs 汇总分支已废弃——它正是并发推送被吞的源头。）
-          mkdir -p "$D"; git -C "$D" init -q -b ci-logs-runs
-          git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          # ⚠️⚠️ 2026-10-25 改：每个平台失败诊断推到【独立 ref】refs/heads/ci-logs-runs/<run_id>-<target>，
+          #    消除四平台并行失败时的 non-fast-forward 被吞。2026-10-25 深夜修正：改用**克隆既有 ci-logs
+          #    分支**再推送（此前用 git init 空仓库，空仓下 HEAD 无可推送提交 → push 静默失败被吞，导致
+          #    监控再次失明）。克隆法此前已实证可认证/可达（ci-logs 旧分支成功推送过）。
+          if git clone --depth 1 -b ci-logs "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$D" 2>/dev/null; then
+            echo "ci-logs 分支已存在，克隆成功"
+          else
+            mkdir -p "$D"; git -C "$D" init -q -b ci-logs-runs
+            git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            echo "ci-logs 分支不存在，本地新建并绑定 origin（首次）"
+          fi
           mkdir -p "$D/logs"
           cp /tmp/diag.txt "$D/logs/${{ github.run_id }}-${TARGET_SAFE}.txt"
+          # 同时落到 workspace 根，供下方 upload-artifact 兜底（git push 再失败时仍能从 Actions UI 取）
+          cp /tmp/diag.txt "./diag-${TARGET_SAFE}-${{ github.run_id }}.txt"
           git -C "$D" -c user.email=ci@local -c user.name=ci add -A
-          git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}" || echo "(无新内容可提交)"
+          git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}" || echo "(ci-logs 无新内容可提交)"
           RUNREF="ci-logs-runs/${{ github.run_id }}-${TARGET_SAFE}"
           ok=0
           for attempt in 1 2 3; do
             if git -C "$D" push origin "HEAD:refs/heads/$RUNREF" 2>/dev/null; then ok=1; break; fi
             echo "push 独立 ref 尝试 $attempt 失败，重试..."; sleep 5
           done
-          [ "$ok" = "1" ] && echo "✓ 诊断已推到 refs/heads/$RUNREF（本机 git ls-remote 必见）" || echo "!! 独立 ref 推送失败（网络？诊断未上传）"
+          [ "$ok" = "1" ] && echo "✓ 诊断已推到 refs/heads/$RUNREF（本机 git ls-remote 必见）" || echo "!! 独立 ref 推送失败（网络？但 artifact 已留底，可去 Actions UI 取）"
+
+      - name: Upload diagnostics artifact (on failure, fallback)
+        # git push 失败时仍可从 Actions UI 下载诊断（非阻塞）。诊断同时落在
+        #   refs/heads/ci-logs-runs/<run_id>-<target>（本机 git ls-remote 可读）与 Action artifact。
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diag-${{ env.TARGET_SAFE }}-${{ github.run_id }}
+          path: diag-*.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Create release
         # ⚠️ 本条件曾写 `inputs.make_release != false`——正是 env 注释里同款坑：
