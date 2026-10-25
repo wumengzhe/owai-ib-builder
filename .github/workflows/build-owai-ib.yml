@@ -164,17 +164,21 @@ jobs:
           echo "TARGET_SAFE=${MT//\//-}" >> "$GITHUB_ENV"
           echo "target        = $MT"
           echo "branch        = $BRANCH  ref=${REF:-<head>}"
-          # ⚠️ 钉版自检：schedule 触发时 inputs.*全为空，此处若回落 <head>，
-          #    IB 内核代会随上游漂移、与 wmz-lede-multisize 源树脱代 → assembler make info 崩溃。
-          #    校验用【长度+字符集】而非硬编码字符串：用户合法传入其它 sha（40 位）不该被误报，
-          #    而 git 缩写（12 位）会让 checkout 当分支名去 fetch 而失败，必须在 Clone 前拦下。
-          #    （注：别用 case + 40 个字符类的写法，实测会把合法 40 位 sha 误判为非法——超长
-          #      字符类列表在 shell 里不可靠。用 bash 正则 ^[0-9a-fA-F]{40}$ 最稳。）
+          # ⚠️ 钉版自检（2026-10-25 修正）：用户明确「内核版本不一定非得控制在 6.12.108」，
+          #    故 **空 REF 现在合法**——回退到 openwrt_branch 的 HEAD（随上游最新）。
+          #    schedule 定时构建 / workflow_dispatch 不填 openwrt_ref / push 触发器（inputs 全空）
+          #    三种情况下 REF 都为空，此前此处 `exit 1` 会让**每一次**这类触发在第一步秒挂
+          #    （run14/run15 的「页面马上报错、监控却失明」根因就在这）。
+          #    空 REF 的代差风险由后续「Self-check IB (make info must not crash)」步兜底
+          #    （IB 内核代与源树脱代会 make info 非零退出并带诊断），无需在此 preemptive 失败。
+          #    仍保留【长度+字符集】校验：只有「非空且非 40 位 sha」才 fatal——这种值会让
+          #    actions/checkout 把它当分支名去 fetch refs/heads/<短sha> 而失败，必须在 Clone 前拦下。
+          #    （别用 case + 40 个字符类的写法，实测会把合法 40 位 sha 误判为非法。用 bash
+          #      正则 ^[0-9a-fA-F]{40}$ 最稳。）
           if [[ "$REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
             echo "openwrt_ref = 完整 40 位 sha ✓"
           elif [ -z "$REF" ]; then
-            echo "::error::openwrt_ref 为空 —— 将回退到 openwrt_branch 头，IB 内核代可能与源树脱代"
-            exit 1
+            echo "::warning::openwrt_ref 为空 —— 回退到 openwrt_branch 头($BRANCH)，IB 内核代随上游漂移；若与源树脱代，后续 make info 自检会拦下"
           else
             echo "::error::openwrt_ref=$REF 不是完整 40 位 sha（长度 ${#REF}）。actions/checkout 会把它当分支/标签名去 fetch refs/heads/$REF 而失败。请补全为 40 位。"
             exit 1
@@ -1074,9 +1078,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ⚠️ 本机没有 GitHub token，读不到 Actions 的 job 日志（私有仓）。失败时把关键现场
-      #    推到 **ci-logs** 分支，我这边用 git + SSH 就能取回逐个排查。
-      #    ⚠️ 绝不能推回 ci-filogic（那会又触发一次 workflow → 死循环），所以用独立分支。
-      #    ci-logs 是临时分支，整轮修完会连同 ci-filogic 一起删掉。
+      #    推到 **ci-logs-runs/<run_id>-<target>** 独立 ref（每个平台一个，互不冲突），
+      #    我这边用 git + SSH 就能取回逐个排查。
+      #    ⚠️ 绝不能推回 ci-filogic（那会又触发一次 workflow → 死循环），所以用独立 ref。
+      #    ci-logs-runs/* 是临时诊断 ref，整轮修完会连同 ci-filogic 一起清理。
+      #    ⚠️ 2026-10-25 起废弃单一 ci-logs 汇总分支：四平台并行失败时 depth-1 clone 同基
+      #       再 push 会 non-fast-forward 被 continue-on-error 静默吞 → 本机失明。独立 ref
+      #       彻底消除该竞争。
       - name: Dump diagnostics to ci-logs branch (on failure)
         # ⚠️ 2026-10-25 补 `|| cancelled()`：job 被取消（6h runner 硬上限 / 手工 cancel /
         #    concurrency cancel-in-progress 抢跑）时状态是 **cancelled 而非 failure**，
@@ -1084,9 +1092,10 @@ jobs:
         #    正是撞在这上面。加上 cancelled 后，无论超时还是被抢跑都能带回现场。
         # ⚠️⚠️ 2026-10-25 二次修（run14 失明根因）：**绝不能用 working-directory: openwrt**！
         #    若 Clone 步失败导致 openwrt 目录不存在，GitHub 会让本 step 因「目录不存在」
-        #    直接失败，再被 continue-on-error 静默吞掉 → 诊断命令（含最后的 git push
-        #    ci-logs）压根不执行 → ci-logs 永远不变 → 本机彻底失明（run14 现场就是这么
-        #    来的）。改为脚本内 `cd openwrt`（容错），即使目录不存在也能把 git push 跑完。
+        #    直接失败，再被 continue-on-error 静默吞掉 → 诊断命令压根不执行 → 本机失明。
+        #    改为脚本内 `cd openwrt`（容错），即使目录不存在也能把诊断采集与推送跑完。
+        #    ⚠️ 推送目标改为 **每平台独立 ref**（见下方），并发竞争从根上消除；仍保留 3 次重试
+        #       兜底瞬时网络失败，确保诊断必落盘、本机 git ls-remote 必见。
         if: failure() || cancelled()
         continue-on-error: true
         run: |
@@ -1138,21 +1147,23 @@ jobs:
           } > /tmp/diag.txt 2>&1
           cat /tmp/diag.txt
           D=/tmp/cilog; rm -rf "$D"
-          if git clone --depth 1 -b ci-logs "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$D"; then
-            echo "ci-logs 分支已存在"
-          else
-            mkdir -p "$D"; git -C "$D" init -q -b ci-logs
-            # ⚠️ 2026-10-24 实锤：git init 后忘了加 origin → 下面 push origin 永远报
-            #   "fatal: 'origin' does not appear to be a git repository" → ci-logs 分支
-            #   永远建不出来，本机彻底失明。这里必须把 token URL 绑定为 origin。
-            git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-            echo "ci-logs 分支不存在，本地新建并绑定 origin"
-          fi
+          # ⚠️⚠️ 2026-10-25 改：每个平台失败诊断推到【独立 ref】refs/heads/ci-logs-runs/<run_id>-<target>。
+          #    彻底消除四平台并行失败时「depth-1 clone 同基 → 后者 non-fast-forward 被 continue-on-error 吞」
+          #    的并发失明（run14/run15 监控失明根因之一）。独立 ref 互不冲突、必落盘；本机 git ls-remote 必见。
+          #    （旧的单一 ci-logs 汇总分支已废弃——它正是并发推送被吞的源头。）
+          mkdir -p "$D"; git -C "$D" init -q -b ci-logs-runs
+          git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           mkdir -p "$D/logs"
           cp /tmp/diag.txt "$D/logs/${{ github.run_id }}-${TARGET_SAFE}.txt"
           git -C "$D" -c user.email=ci@local -c user.name=ci add -A
-          git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}"
-          git -C "$D" push origin HEAD:ci-logs
+          git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}" || echo "(无新内容可提交)"
+          RUNREF="ci-logs-runs/${{ github.run_id }}-${TARGET_SAFE}"
+          ok=0
+          for attempt in 1 2 3; do
+            if git -C "$D" push origin "HEAD:refs/heads/$RUNREF" 2>/dev/null; then ok=1; break; fi
+            echo "push 独立 ref 尝试 $attempt 失败，重试..."; sleep 5
+          done
+          [ "$ok" = "1" ] && echo "✓ 诊断已推到 refs/heads/$RUNREF（本机 git ls-remote 必见）" || echo "!! 独立 ref 推送失败（网络？诊断未上传）"
 
       - name: Create release
         # ⚠️ 本条件曾写 `inputs.make_release != false`——正是 env 注释里同款坑：
