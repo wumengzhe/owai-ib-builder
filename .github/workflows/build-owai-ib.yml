@@ -1,5 +1,13 @@
 name: Build OWAI-aligned ImageBuilder
 
+# ⚠️ ci-filogic 是临时 scratch 分支，每次推送都触发新 run。加 concurrency 让新推送
+#   自动 cancel 仍在跑的旧 run（cancel-in-progress），避免修一个小 bug 也要等旧 run
+#   空跑 2-4h 还失败（2026-10-24 实锤：f4133e5 的 awk 取错变体名，靠 run8 修，
+#   靠本组 cancel 掉误触发的 run7）。
+concurrency:
+  group: ci-filogic-${{ github.ref }}
+  cancel-in-progress: true
+
 # 参考 kiddin9/Kwrt 的仓库结构，但目标不同：
 #   Kwrt  = 编固件（openwrt/openwrt@openwrt-25.12 + 自家 op-packages feed，默认 APK）
 #   本工作流 = 只编 **ImageBuilder**，并刻意保持 **opkg**（不与 owai 同格式就废了）
@@ -23,6 +31,10 @@ name: Build OWAI-aligned ImageBuilder
 #   固件将无 kmod 来源（owai 没有可用的远程 kmod）。
 
 on:
+  # 临时分支 ci-filogic 用的 push 触发器（本机无 GH token，无法调 workflow_dispatch）。
+  # 仅挂 ci-filogic 一个分支，跑完即删该分支，main 保持只受 workflow_dispatch/schedule 触发。
+  push:
+    branches: [ci-filogic]
   workflow_dispatch:
     inputs:
       targets:
@@ -30,13 +42,31 @@ on:
         required: false
         default: '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]'
       openwrt_branch:
-        description: 'openwrt/openwrt 分支'
+        description: 'openwrt/openwrt 分支。改 master 则内核升到 6.18 代（qualcommax/rockchip 的 config-6.18 已就位）；openwrt-25.12 为 6.12 代'
         required: true
         default: 'openwrt-25.12'
       openwrt_ref:
-        description: '精确 commit sha（默认钉在 6.12.108 代 7722054025462cbc4cc6225cfe49ea0ad409b302）。该代与 wmz-lede-multisize 源树内核一致，能让 assembler「镜像定义修复」改写 makefile 时成为 no-op，从而消除 make info 崩溃（kernel version/hash file missing）。⚠️ 必须是完整 40 位 sha——actions/checkout 不认 git 缩写（12 位会被当成分支/标签名去 fetch refs/heads/<短sha> 而失败）。留空则回退到内置钉版。'
+        # ✅ 2026-10-25 用户明确：「内核版本不一定非得控制在 6.12.108」——故取消默认钉版，
+        #    改为**跟随 openwrt_branch 的分支 HEAD**（每次 CI 拉该分支最新提交）。
+        #    留空 = 不钉版（默认）；填完整 40 位 sha = 钉死那一版。
+        #
+        #    历史上为什么钉过 7722054025462cbc4cc6225cfe49ea0ad409b302（6.12.108 代）：
+        #      该代与 wmz-lede-multisize 源树内核一致，能让 assembler「镜像定义修复」改写
+        #      makefile 时成为 no-op，从而消除 make info 崩溃（kernel version/hash file
+        #      missing）。——但这只是**规避手段**，不是原理要求：assembler 侧真正的适配
+        #      应当靠 kernel version/hash 的实际比对来做，不该靠把 CI 锁死在某一版上。
+        #      锁死的代价更大：上游 openwrt-25.12 后续的 bugfix（含 subtarget 级别修复）
+        #      拿不到，ipq60xx 这类新 subtarget 一旦在旧版有问题就无从解脱。
+        #
+        #    ⚠️ 需要复现旧构建 / 二分定位「是上游变更还是我们的改动」时，在此填那个 sha
+        #      即可回到钉版状态；CI 日志首行会打印 SOURCE=<sha> 便于溯源。
+        #    ⚠️ 填值必须是【完整 40 位】sha，不能用 git 缩写（12 位）！actions/checkout
+        #      只把恰好 40 位十六进制当 commit sha；给 12 位它会当成【分支/标签名】去
+        #      fetch refs/heads/<短sha> → 不存在 → 重试 3 次全失败，Clone 步直接挂
+        #      （2026-10-16 实测）。
+        description: '可选。精确 commit sha（钉版）。留空 = 跟随上面分支的 HEAD（推荐）。填值必须是完整 40 位 sha，不能用 git 缩写'
         required: false
-        default: '7722054025462cbc4cc6225cfe49ea0ad409b302'
+        default: ''
       use_apk:
         description: 'true=编 APK 版 IB（默认 false；必须保持 opkg 才能与 owai 互通）'
         type: boolean
@@ -79,14 +109,13 @@ env:
   #    改为在首个 step 用「矩阵 step 级 env」写入 $GITHUB_ENV（见 Show parameters），
   #    同时生成 TARGET_SAFE（把 / 换成 -，供 artifact 名 / Release tag 用，Git tag 禁 /）。
   BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
-  # ⚠️ REF 的 fallback 必须是那个 commit sha，不能是 '' —— schedule 触发时 inputs.* 全为空，
-  #    若此处回落空串，Clone 步就会拉分支头（定时构建等于放弃钉版），IB 内核代随上游漂移
-  #    → assembler make info 崩溃。
-  # ⚠️⚠️ 必须是【完整 40 位】sha，不能用 git 缩写（12 位）！actions/checkout 只把恰好
-  #    40 位十六进制当 commit sha；给 12 位它会当成【分支/标签名】去 fetch
-  #    refs/heads/772205402546* → 不存在 → `The process '/usr/bin/git' failed with exit code 1`
-  #    重试 3 次全失败，Clone 步直接挂（2026-10-16 实测）。
-  REF: ${{ inputs.openwrt_ref || '7722054025462cbc4cc6225cfe49ea0ad409b302' }}
+  # ✅ 2026-10-25 起 REF 默认为空 = **不钉版**，随 BRANCH 的 HEAD 走（用户明确「内核版本
+  #    不一定非得控制在 6.12.108」）。需要复现/二分时由 inputs.openwrt_ref 传完整 40 位 sha
+  #    即可回到钉版。Schedule 触发时 inputs.* 全空，这里也就保持空 → 定时构建自动取最新。
+  # ⚠️⚠️ 一旦填值就必须是【完整 40 位】sha，不能用 git 缩写（12 位）！actions/checkout
+  #    只把恰好 40 位十六进制当 commit sha；给 12 位它会当成【分支/标签名】去 fetch
+  #    refs/heads/772205402546* → 不存在 → 重试 3 次全失败，Clone 步直接挂（2026-10-16 实测）。
+  REF: ${{ inputs.openwrt_ref || '' }}
   USE_APK: ${{ inputs.use_apk == true && 'true' || 'false' }}
   STANDALONE: ${{ (inputs.standalone == true || inputs.standalone == '' || inputs.standalone == null) && 'true' || 'false' }}
   EXTRA_PKGS: ${{ inputs.extra_packages || '' }}
@@ -102,13 +131,27 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # ⚠️⚠️ 2026-10-25 实锤补：此前未设 timeout-minutes → 用 GitHub 默认 360 分钟硬上限。
+    #    全 SoC filogic（~145 个 uboot+ATF 变体）实测 3h08m，四平台并行时一旦某个
+    #    job 越过 6h，runner 会把它置为 **cancelled**（不是 failure）→
+    #    ① 没有 tag 产出 ② `if: failure()` 的 Dump 步不触发 → 本机彻底失明，
+    #    只能看到「8 小时过去、无 tag、ci-logs 未动」这种无信息量的状态（run12 现场）。
+    #    设为 330（5.5h）：正常构建 3h 有余量；真超时则由 GH 判 failure → 触发 Dump
+    #    诊断，/tmp/build.log 末 80 行能带回现场，可定位是卡在哪个包。
+    #    ⚠️ 另注意 GitHub Free 私有仓配额 2000 分钟/月：四平台一次约 700+ 分钟，
+    #    配额耗尽时 job 会**排队不启动**（同样无 tag、无日志），需到 Actions 页面确认。
+    timeout-minutes: 330
     strategy:
       # 三平台并行；fail-fast:false 让单个 target 失败不拖垮其余两个
       fail-fast: false
       matrix:
-        # push 触发时 inputs.targets 为空 → 回退到默认四平台 JSON 数组
-        # （ipq60xx 于 2026-10-21 新增：qualcommax subtarget 在 7722054025 实测存在，
-        #  与 ipq807x 同 target 不同 subtarget，KERNEL_WERROR/variant 互斥等修复通用）
+        # push 触发时 inputs.targets 为空 → 回退到默认平台 JSON 数组。
+        # ✅ 2026-10-25 四平台终验：filogic 修复已全通（run10 mt7981 / run11 全 SoC FIP），
+        #   恢复四平台矩阵做终验。ipq60xx 于 2026-10-21 新增（与 ipq807x 同 target 不同 subtarget）。
+        #   ⚠️ 非 filogic 平台：① Generate .config 的 bootloader 变体强制选中 ② Inspect 的
+        #   FIP/bl2/jcg 硬门禁——均已加 filogic-only 守卫（ipq807x/ipq60xx/armv8 不产 mt798x
+        #   u-boot.fip/bl2，硬门禁会误杀）。kernel.bin 门禁保持全平台（CONFIG_IB 路径为所有
+        #   设备产 <device>-kernel.bin）。
         target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]') }}
     steps:
       - name: Show parameters
@@ -159,7 +202,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openwrt/openwrt
-          ref: ${{ env.REF }}
+          # REF 为空 → 取 BRANCH 的 HEAD（不钉版，默认行为）；REF 有值 → 钉那个 sha。
+          # 下一步会打印 SOURCE=<完整 sha>，即使是随 HEAD 走的构建也能精确溯源。
+          ref: ${{ env.REF || env.BRANCH }}
           fetch-depth: 1
           path: openwrt
 
@@ -361,6 +406,23 @@ jobs:
               print("[imagebuilder/Makefile] !! 未匹配 SIGNATURE_CHECK 锚点"); sys.exit(1)
           PY
 
+      - name: Exclude openwrt_one device (IB build quirk)
+        # openwrt_one 的组合固件 artifact（nor/snand-preloader.bin 等）依赖 phony 目标
+        # `openwrt_one-images`，该目标只在【完整 image 构建上下文】定义、IB 构建期不定义 →
+        # `make target/linux/install` 崩在 "No rule to make target 'openwrt_one-images'"
+        # （run3 实锤 ci-logs run=39890290506，停在 target/linux/install Error 2）。
+        # openwrt_one 是开发板、不发货，从 filogic 的 TARGET_DEVICES 剔除即可绕开，
+        # 不影响任何真要发货的设备（jcg_q30-pro 等）的 kernel.bin 预置。
+        working-directory: openwrt
+        run: |
+          F=target/linux/mediatek/image/filogic.mk
+          if [ -f "$F" ] && grep -q 'TARGET_DEVICES += openwrt_one' "$F"; then
+            sed -i '/TARGET_DEVICES += openwrt_one/d' "$F"
+            echo "openwrt_one 已从 filogic TARGET_DEVICES 剔除（绕开 openwrt_one-images 坑）"
+          else
+            echo "openwrt_one 不在 filogic 设备列表或文件不存在，跳过（仅 filogic 有此设备）"
+          fi
+
       - name: Update and install feeds
         working-directory: openwrt
         run: |
@@ -489,17 +551,59 @@ jobs:
                      iptables-mod-socket iptables-mod-tproxy ip6tables-mod-nat; do
               echo "CONFIG_PACKAGE_${p}=m"
             done
-            # ⚠️⚠️ 关闭 rootfs（2026-10-23 新增）：本流程真正需要的只是 <device>-kernel.bin
-            #   （IB 组装 make image 必需，见 Build 步注释）。全部关掉后 install-images 的
-            #   $(KDIR)/root.* 前置为空 → install 退化成「kernel_prepare + 逐机型 kernel.bin」，
-            #   不再编全套固件镜像：省时间，也避免小闪存机型 IMAGE_SIZE 超限把整个 job 挂掉。
-            echo "# CONFIG_TARGET_ROOTFS_SQUASHFS is not set"
-            echo "# CONFIG_TARGET_ROOTFS_EXT4FS is not set"
-            echo "# CONFIG_TARGET_ROOTFS_JFFS2 is not set"
-            echo "# CONFIG_TARGET_ROOTFS_UBIFS is not set"
-            echo "# CONFIG_TARGET_ROOTFS_TARGZ is not set"
-            echo "# CONFIG_TARGET_ROOTFS_CPIOGZ is not set"
+            # ⚠️ 不再关闭 rootfs（撤销 fd6c47c 的关 rootfs 块）：
+            #   原关 rootfs 仅为让独立的 `make target/linux/install` 退化成只产 kernel.bin；
+            #   现在已撤掉该独立步（见 Build 步），关 rootfs 反而会让 IB 运行期 make image
+            #   没有可用根文件系统格式 → 组装必崩。改回 run1 写法：保留默认 rootfs
+            #   （squashfs 等），只跑 target/imagebuilder/compile 打 IB 包，不编全套固件镜像。
           } >> .config
+          # ⚠️⚠️ filogic bootloader 全量显式选中（2026-10-24 新增，build (6).log 实锤）：
+          #   IB 运行期用 Build/mt7981-bl31-uboot / Build/mt7981-bl2 拼
+          #   bl31-uboot.fip 与 preloader.bin 时，要 cat 两份 staged 件：
+          #     staging_dir/.../image/mt7981_<dev>-u-boot.fip   ← uboot-mediatek 设备变体
+          #     staging_dir/.../image/<tfa-variant>-bl2.img     ← arm-trusted-firmware-mediatek 设备变体
+          #   这两类变体在 u-boot.mk / trusted-firmware-a.mk 里 HIDDEN:=1 且 DEFAULT 只在
+          #   「设备 profile 被选中」时成立（u-boot.mk:100-104：DEFAULT:=y if
+          #   (TARGET_DEP_Default || TARGET_DEP_DEVICE_<dev>)）。我们只选了 subtarget，
+          #   没选任何设备 profile → 全部 bootloader 变体都没编 → STAGING_DIR_IMAGE 空 →
+          #   拷贝进 IB 后运行期 `cat .../mt7981_jcg_q30-pro-u-boot.fip` 报 No such file →
+          #   make[3] Error 1（build (6).log line 1821-1825 实锤）。
+          #   修法：直接把 filogic 的全部 uboot / TFA 设备变体强制 =y（hidden 包强制选合法；
+          #   uboot 变体的 DEPENDS:=+trusted-firmware-a-<x> 会连带拉入对应 TFA 变体），
+          #   覆盖每个设备的 FIP 与 preloader 来源。
+          #   ⚠️ 不靠选设备 profile（CONFIG_TARGET_DEVICE_*=y）：那样会经 DEVICE_PACKAGES
+          #   额外拉一批包、还可能搅动 dnsmasq/iptables 的精细互斥处理；本步只补 bootloader。
+          #   kernel.bin 已由 Build 步的 target/linux/install 覆盖（run6 已验证），此处不动。
+          _owai_pick_bl() {
+            # ⚠️⚠️ 2026-10-24 run9 实锤：这里有两个独立的坑，先后都踩过：
+            #   坑1(符号名)：uboot 变体真实包名 = u-boot-<variant>（include/u-boot.mk:91
+            #     `define Package/u-boot-$(1)`）；曾误写 uboot-mediatek-<variant>（全树零命中）。
+            #     TFA 前缀 trusted-firmware-a- 经 DEPENDS:=+trusted-firmware-a-... 实证正确。
+            #   坑2(时机)：`conf --defconfig=.config`(toplevel.mk:124) 会把「非默认选中的
+            #     HIDDEN 包 =y」静默丢弃——run9 在 defconfig 前追加 66 行只剩 4（jcg uboot
+            #     丢失 → 缺 FIP → 卡门禁；幸存的 tfa 是被默认设备 uboot 的 DEPENDS 拉着）。
+            #   ⇒ 本函数改为【直接改写 .config】：sed 删该符号既有行（# 注释/已设值，防重复条目）
+            #     + 追加 =y；且调用点必须放在本步所有 make defconfig 之后（见下方 dnsmasq 块之后）。
+            #     构建读 .config 原样采用（toplevel.mk:94 对含 CONFIG_HAVE_DOT_CONFIG 的 .config
+            #     是 no-op，不重跑 conf）；即便触发 oldconfig 也会保留显式 =y（只 defconfig 丢）。
+            #   ⚠️ 2026-10-24 run11：全 SoC 覆盖（用户决策"最终目标=全 SoC 通用 IB"，对标 openwrt.ai）。
+            #     run10 已用 mt7981 家族验证 post-defconfig 机制通过，故去掉 SoC 过滤，选全部
+            #     filogic 变体（uboot 全 4 SoC + TFA 全显式——post-defconfig 不重跑 config，
+            #     DEPENDS 的 select 不解析，必须显式选 TFA）。openwrt.ai 的 IB 即全 SoC(80 FIP)。
+            #     构建预估 ~4h（6h 上限内）；run9 已实证 65 个 TFA 全编过。
+            local mk="$1" prefix="$2" v sym
+            for v in $(awk '
+              /^define (U-Boot|Trusted-Firmware-A)\// { n=$2; sub(/^[^/]+\//,"",n); f=0; next }
+              /BUILD_SUBTARGET:=filogic/ { if (n!="") f=1; next }
+              /^endef/ { if (n!="" && f==1) print n; n=""; next }
+            ' "$mk"); do
+              sym="${prefix}${v}"
+              sed -i "/^CONFIG_PACKAGE_${sym}=/d;/^# CONFIG_PACKAGE_${sym} is not set/d" .config
+              echo "CONFIG_PACKAGE_${sym}=y" >> .config
+            done
+          }
+          # ⚠️⚠️ bootloader 变体选中改到下方 dnsmasq 块之后、所有 make defconfig 之后再执行
+          #   （run9 实锤：defconfig 前追加会被 conf --defconfig 丢弃，66 行只剩 4，jcg FIP 缺失）。
           make defconfig
           # ⚠️⚠️ post-defconfig：dnsmasq variant 互斥（2026-10-20 run 39413072738 实锤）：
           #   dnsmasq 包有三个 variant（package/network/services/dnsmasq/Makefile）：
@@ -525,6 +629,23 @@ jobs:
               echo "::error::dnsmasq 被其他包强选无法关闭——EXTRA_PKGS 与默认配置 variant 冲突，请从 extra_packages 移除会强拉 dnsmasq-full 的包"; exit 1
             fi
             echo "dnsmasq variant 互斥已处理：full=y，普通/dhcpv6 已关"
+          fi
+          # ⚠️⚠️ filogic bootloader 变体强制选中（必须在本步所有 make defconfig 之后！）：
+          #   IB 运行期 Build/mt7981-bl31-uboot 要 cat staging_dir/.../image/mt7981_<dev>-u-boot.fip、
+          #   bl2 要 <tfa>-bl2.img；这些 HIDDEN 变体只在「设备 profile 选中」时 DEFAULT=y，我们只选
+          #   subtarget → 不编 → 缺 FIP（build (6).log 实锤 cat No such file）。
+          #   _owai_pick_bl 直接改写 .config（sed 删旧行 + 追加 =y），绕过 defconfig 的丢弃；
+          #   全 SoC 覆盖（mt7981/7986/7987/7988）全部 filogic 设备的 FIP/preloader，对标 openwrt.ai。
+          #   ⚠️ 仅 filogic：非 filogic target 不产 mt798x bootloader，选中会往 .config 塞孤儿 =y。
+          if [ "$TARGET" = "mediatek/filogic" ]; then
+            _owai_pick_bl package/boot/uboot-mediatek/Makefile u-boot-
+            _owai_pick_bl package/boot/arm-trusted-firmware-mediatek/Makefile trusted-firmware-a-
+            echo "--- bootloader =y（defconfig 之后强制选中）存活校验 ---"
+            echo "全 SoC(mt798x) uboot/tfa =y 行数（预期 ~140+）: $(grep -cE '^CONFIG_PACKAGE_(u-boot|trusted-firmware-a)-mt798' .config)"
+            grep -qE '^CONFIG_PACKAGE_u-boot-mt7981_jcg_q30-pro=y' .config && echo "  ✓ jcg uboot =y 在 .config" || echo "  ✗✗ jcg uboot =y 缺失（强制选中失败）"
+            grep -qE '^CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=y' .config && echo "  ✓ jcg tfa =y 在 .config" || echo "  ✗✗ jcg tfa =y 缺失"
+          else
+            echo "非 filogic target($TARGET)：跳过 bootloader 变体强制选中（FIP/bl2 仅 filogic 需要）"
           fi
           echo "--- 生效的关键配置 ---"
           grep -E '^(CONFIG_USE_APK|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_SIGNATURE_CHECK|CONFIG_ALL_KMODS|CONFIG_KERNEL_WERROR|CONFIG_TARGET_|CONFIG_PACKAGE_dnsmasq)' .config | head -20
@@ -578,23 +699,48 @@ jobs:
       #      IB 打包靠 `-cp $(KERNEL_BUILD_DIR)/* $(IB_KDIR)/` 把这些文件带进 IB，
       #      没跑 install 就是一个都没有 → 任何机型组装都在最后一步崩。
       # ------------------------------------------------------------------
-      - name: Build toolchain, kernel, all packages, kernel images, then ImageBuilder
+      - name: Build toolchain, kernel, all packages, then ImageBuilder
         working-directory: openwrt
         run: |
-          # ⚠️ 分三条 make：goal 之间在 -j 下是**可以并行**的（make 不保证左到右串行），
-          #    若把 target/linux/install 与 target/imagebuilder/compile 写在同一条命令里，
-          #    IB 打包可能抢在 kernel.bin 产出之前跑完 → 打进 IB 的还是 0 个 kernel.bin。
-          #    显式拆成三条，顺序就有保障了。
-          make -j$(nproc) tools/install toolchain/install target/compile \
-                          package/compile package/install V=s
-          make -j$(nproc) target/linux/install V=s
-          make -j$(nproc) target/imagebuilder/compile V=s
+          # ⚠️ 单条 make 串整套 phase：tools→toolchain→target/compile(kernel)→package/compile
+          #    →package/install(填充 bin/packages)→target/linux/install(产 <device>-kernel.bin)
+          #    →target/imagebuilder/compile(打 IB 包)。这是 run1 风格的单条 make；但 run1/run4
+          #    漏了 **target/linux/install** 这一环 → IB 内 0 个 kernel.bin → 下游 jcg_q30-pro
+          #    拼 .itb 崩（build (5).log 实锤：No rule to make target '.../jcg_q30-pro-kernel.bin'）。
+          #    ⚠️⚠️ 为什么必须含 target/linux/install（run4 漏它 → 0 kernel.bin）：
+          #    include/image.mk 的 Device/Build/kernel 在 `ifndef IB` + `ifdef CONFIG_IB` 下把每个
+          #    设备的 $(KDIR_KERNEL_IMAGE)（即 <device>-kernel.bin）挂到 `install` 目标（image.mk:755）；
+          #    target/imagebuilder/Makefile:112 再用 `-cp $(KERNEL_BUILD_DIR)/* $(IB_KDIR)/` 把这些
+          #    kernel.bin 打进 IB。
+          #    ↑ 这条链**只在构建 IB 时（IB 未置）**生效；IB 运行期 IB=1 会把整段 `ifndef IB`
+          #    （image.mk:753）屏蔽，运行期根本没有现编内核的规则——kernel.bin 必须构建期预置，
+          #    否则任何 .itb 设备组装必崩。早先（fd6c47c→a68cf5a）撤掉该步是**错误方向**。
+          #    ⚠️ openwrt_one 坑（run3 实锤 ci-logs run=39890290506）：openwrt_one 的组合固件
+          #    artifact 依赖 phony `openwrt_one-images`（只在完整 image 构建上下文定义、IB 构建期
+          #    不定义）→ 独立 `make target/linux/install` 崩在该目标。我们已在「Exclude openwrt_one」
+          #    步把它从 filogic TARGET_DEVICES 剔除（开发板、不发货），绕开该坑且不影响真要发货的
+          #    设备（jcg_q30-pro 等）的 kernel.bin 预置。
+          # ⚠️⚠️ 2026-10-24：用 { … } 2>&1 | tee /tmp/build.log 把完整 make 输出落盘。
+          #    GH 默认 shell 已带 -o pipefail，make 真实退出码仍能触发本步失败；
+          #    同时 /tmp/build.log 供失败时的 Dump 步抓取——否则 ci-logs 一旦失明，
+          #    我们连 make 报什么错都看不到（这正是 run2 失明的原因）。
+          { make -j$(nproc) tools/install toolchain/install target/compile \
+                          package/compile package/install target/linux/install \
+                          target/imagebuilder/compile V=s
+          } 2>&1 | tee /tmp/build.log
           ls -lh bin/targets/*/*/*imagebuilder*.tar.zst
           echo "--- bin/packages 是否含 kmod（抽查）---"
           find bin/packages -name 'kmod-*.ipk' | head -3 || true
-          echo "--- <device>-kernel.bin 数量（IB 必需；为 0 则下游 make image 必崩）---"
-          find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | wc -l
-          find build_dir/target-*/linux-* -maxdepth 1 -name '*-kernel.bin' | head -5
+          # ⚠️ 2026-10-25 修正：后缀不再是 -kernel.bin 一种（详见 Inspect 步门禁注释）。
+          #   qualcommax 全走 Device/FitImage → 产物是 <device>-uImage.itb，
+          #   按 -kernel.bin 统计会显示 0 并误导排查（ipq60xx 31 个设备全是 itb）。
+          echo "--- 逐机型内核镜像数量（后缀随 KERNEL_SUFFIX 变：*-kernel.bin 或 *-uImage.itb...；仅观测）---"
+          find build_dir/target-*/linux-[!f]* -maxdepth 1 \
+               \( -name '*-kernel.bin' -o -name '*-kernel.itb' -o -name '*-uImage' \
+                  -o -name '*-uImage.itb' -o -name '*-zImage' -o -name '*-zImage.itb' \) 2>/dev/null | wc -l
+          find build_dir/target-*/linux-[!f]* -maxdepth 1 \
+               \( -name '*-kernel.bin' -o -name '*-kernel.itb' -o -name '*-uImage' \
+                  -o -name '*-uImage.itb' -o -name '*-zImage' -o -name '*-zImage.itb' \) 2>/dev/null | head -5
 
       # ⚠️ kmod 覆盖自检（对应「自编 IB + 外挂 owai 远程源」架构的必需前提）
       #   owai 远程源实测为纯 userspace（kmod-* = 0），但有 128 个包的 Depends 引用
@@ -784,17 +930,85 @@ jobs:
           fi
           echo "核心用户态链 17 项全部在 IB 内 ✓"
           echo ""
-          # ⚠️⚠️ <device>-kernel.bin 硬门禁（2026-10-23 实锤，同上 build (4).log）：
-          #   IB 里没有这些文件 → 下游 assembler `make image` 末段
-          #   "No rule to make target '.../<device>-kernel.bin'" → 任何机型都组装不出来。
-          echo "--- 逐机型 kernel.bin 断言（IB 组装 make image 必需）---"
-          KB=$(tar -tf "$IB" | grep -cE 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' || true)
-          echo "kernel.bin 数 = $KB"
+          # ⚠️⚠️ 逐机型「内核镜像」硬门禁（2026-10-24 由"仅观测"改为硬门禁；
+          #    2026-10-25 二次修正：**后缀不能写死 -kernel.bin**）。
+          #
+          #   【为什么必须有】下游 make image 运行期 IB=1 时，image.mk 的
+          #   $(KDIR_KERNEL_IMAGE) 规则被 `ifndef IB`（image.mk:753）整段屏蔽，根本
+          #   没有现编内核的规则，只能依赖 IB 预置的逐机型内核镜像。预置来自构建期：
+          #   image.mk:755（ifndef IB+ifdef CONFIG_IB → `install: <dev><SUFFIX>`）
+          #   + 本流程已含的 target/linux/install 实跑 + imagebuilder/Makefile:112
+          #   （`-cp $(KERNEL_BUILD_DIR)/* $(IB_KDIR)/`）。run4 漏掉 target/linux/install
+          #   → 0 个 → 下游 .itb 设备组装必崩。故本门禁必须硬性。
+          #
+          #   【⚠️ 为什么后缀不能写死】（2026-10-25 ipq60xx 连续失败的真凶）
+          #   image.mk:506 默认 `KERNEL_SUFFIX := -kernel.bin`，但 **每个设备可覆写**，
+          #   :625 `KDIR_KERNEL_IMAGE := $(KDIR)/$(1)$$(KERNEL_SUFFIX)` —— 产物后缀随之变。
+          #   qualcommax 的 Device/FitImage / Device/FitImageLzma 覆写成 **-uImage.itb**
+          #   （target/linux/qualcommax/image/Makefile:15/21）。而 ipq60xx 的 31 个设备
+          #   **全部**走这条路径 → IB 里一个 -kernel.bin 都没有 → 写死的门禁必杀它。
+          #   ipq807x 只因 asus_rt-ax89x 不走 FitImage、留下 1 个 -kernel.bin 才侥幸通过。
+          #   本地全树统计实锤：
+          #     mediatek/filogic 209 个设备 → 209 个 -kernel.bin
+          #     rockchip/armv8    62 个设备 →  62 个 -kernel.bin
+          #     qualcommax/ipq807x 46 个设备 →  1 个 -kernel.bin + 45 个 -uImage.itb
+          #     qualcommax/ipq60xx 31 个设备 →  0 个 -kernel.bin + 31 个 -uImage.itb  ← 被误杀
+          #   全树后缀实测 11 种（-kernel.bin/-kernel.itb/-uImage/-uImage.itb/
+          #   -fit-uImage.itb/-zImage/-zImage.itb/-fit-zImage.itb(含 .vboot)/-factory.firm/.ari），
+          #   故这里按**内核镜像后缀并集**接受（排除厂商固件格式 .ari / -factory.firm）。
+          echo "--- 逐机型内核镜像计数（硬门禁：必须 > 0）---"
+          KBSUF='kernel\.bin|kernel\.itb|uImage|uImage\.itb|fit-uImage\.itb|zImage|zImage\.itb|fit-zImage\.itb'
+          KB=$(tar -tf "$IB" | grep -cE "build_dir/.*/linux-[^/]+/[^/]+(-($KBSUF))(\.vboot)?$" || true)
+          echo "内核镜像总数 = $KB"
+          echo "按后缀分布："
+          tar -tf "$IB" | grep -E "build_dir/.*/linux-[^/]+/[^/]+(-($KBSUF))(\.vboot)?$" \
+            | sed -E 's#.*/[^/]*-[^/]*(-(kernel|uImage|zImage)[^/]*)$#\1#' | sort | uniq -c | sort -rn | head -10
+          tar -tf "$IB" | grep -E "build_dir/.*/linux-[^/]+/[^/]+(-($KBSUF))(\.vboot)?$" | head -3
           if [ "$KB" -eq 0 ]; then
-            echo "::error::IB 内 0 个 <device>-kernel.bin —— target/linux/install 没产出（或 rootfs 关过头），组装必崩，拒绝发布"
+            echo "::error::IB 内 0 个逐机型内核镜像 —— 构建期漏跑 target/linux/install 或 openwrt_one 坑未绕开，下游组装必崩，拒绝发布"
             exit 1
           fi
-          tar -tf "$IB" | grep -E 'build_dir/.*/linux-[^/]+/[^/]+-kernel\.bin$' | head -3
+          echo "逐机型内核镜像校验通过 ✓（IB 已预置，下游 make image 可直接复用）"
+          echo ""
+          # ⚠️⚠️ U-Boot FIP / TFA bl2 硬门禁（2026-10-24 新增，build (6).log 实锤）：
+          #   IB 运行期 Build/mt7981-bl31-uboot 会 `cat $(STAGING_DIR_IMAGE)/mt7981_<dev>-u-boot.fip`
+          #   拼 bl31-uboot.fip；Build/mt7981-bl2 拼 preloader.bin 要 <tfa-variant>-bl2.img。
+          #   这两类件只由 uboot-mediatek / arm-trusted-firmware-mediatek 的 filogic 设备变体
+          #   编出（HIDDEN+DEFAULT 仅随设备 profile 选中，故 Generate .config 步已显式 =y）。
+          #   若漏选 → STAGING_DIR_IMAGE 无件 → imagebuilder/Makefile:136 拷贝后 IB 仍缺 →
+          #   下游 jcg_q30-pro 组装 `cat .../mt7981_jcg_q30-pro-u-boot.fip` No such file → Error 1。
+          #   （FIP 由 uboot-mediatek Build/InstallDev:1515 命名 $(BUILD_VARIANT)-u-boot.fip；
+          #    bl2 由 TFA Package/install:819 命名 $(BUILD_VARIANT)-bl2.img。）
+          echo "--- U-Boot FIP / TFA bl2 断言（硬门禁，仅 filogic）---"
+          FIP=$(tar -tf "$IB" | grep -cE 'staging_dir/target-[^/]+/image/[^/]+-u-boot\.fip$' || true)
+          BL2=$(tar -tf "$IB" | grep -cE 'staging_dir/target-[^/]+/image/[^/]+-bl2\.img$' || true)
+          echo "u-boot.fip 数 = $FIP"
+          echo "bl2.img 数    = $BL2"
+          tar -tf "$IB" | grep -E 'staging_dir/target-[^/]+/image/mt7981_jcg_q30-pro-u-boot\.fip$' || true
+          tar -tf "$IB" | grep -E 'staging_dir/target-[^/]+/image/mt7981-spim-nand-ddr3-bl2\.img$' || true
+          # ⚠️ 仅 filogic 硬门禁：ipq807x/ipq60xx/armv8 不产 mt798x u-boot.fip/bl2（FIP/BL2 恒 0），
+          #   非 filogic 平台若跑这些门禁会被误杀。故 4 条门禁全部加 filogic-only 守卫。
+          if [ "$TARGET" = "mediatek/filogic" ] && [ "$FIP" -eq 0 ]; then
+            echo "::error::IB 内 0 个 *-u-boot.fip —— filogic bootloader 变体未编出，下游所有 mt798x 设备组装必崩，拒绝发布"
+            exit 1
+          fi
+          if [ "$TARGET" = "mediatek/filogic" ] && [ "$BL2" -eq 0 ]; then
+            echo "::error::IB 内 0 个 *-bl2.img —— TFA bl2 未编出，下游所有 mt798x 设备 preloader 必缺，拒绝发布"
+            exit 1
+          fi
+          if [ "$TARGET" = "mediatek/filogic" ] && ! tar -tf "$IB" | grep -qE 'staging_dir/target-[^/]+/image/mt7981_jcg_q30-pro-u-boot\.fip$'; then
+            echo "::error::IB 缺 mt7981_jcg_q30-pro-u-boot.fip —— jcg_q30-pro 组装必崩，拒绝发布"
+            exit 1
+          fi
+          if [ "$TARGET" = "mediatek/filogic" ] && ! tar -tf "$IB" | grep -qE 'staging_dir/target-[^/]+/image/mt7981-spim-nand-ddr3-bl2\.img$'; then
+            echo "::error::IB 缺 mt7981-spim-nand-ddr3-bl2.img —— jcg_q30-pro preloader 源缺失，组装必崩，拒绝发布"
+            exit 1
+          fi
+          if [ "$TARGET" = "mediatek/filogic" ]; then
+            echo "U-Boot FIP / TFA bl2 校验通过 ✓（IB 已预置 filogic 全设备 bootloader）"
+          else
+            echo "非 filogic target($TARGET)：跳过 FIP/bl2 门禁（不产 mt798x bootloader）"
+          fi
           echo ""
           # ⚠️⚠️ owai 依赖、但 owai 四流实测 0 命中的 core 包（必须 IB 本地出，
           #   详见 Generate .config 里的注释）。缺它们 firewall4 / passwall2 等装不上。
@@ -859,6 +1073,87 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # ⚠️ 本机没有 GitHub token，读不到 Actions 的 job 日志（私有仓）。失败时把关键现场
+      #    推到 **ci-logs** 分支，我这边用 git + SSH 就能取回逐个排查。
+      #    ⚠️ 绝不能推回 ci-filogic（那会又触发一次 workflow → 死循环），所以用独立分支。
+      #    ci-logs 是临时分支，整轮修完会连同 ci-filogic 一起删掉。
+      - name: Dump diagnostics to ci-logs branch (on failure)
+        # ⚠️ 2026-10-25 补 `|| cancelled()`：job 被取消（6h runner 硬上限 / 手工 cancel /
+        #    concurrency cancel-in-progress 抢跑）时状态是 **cancelled 而非 failure**，
+        #    只写 failure() 会让这些情况全部失明——run12「8h 无 tag 且 ci-logs 不动」
+        #    正是撞在这上面。加上 cancelled 后，无论超时还是被抢跑都能带回现场。
+        # ⚠️⚠️ 2026-10-25 二次修（run14 失明根因）：**绝不能用 working-directory: openwrt**！
+        #    若 Clone 步失败导致 openwrt 目录不存在，GitHub 会让本 step 因「目录不存在」
+        #    直接失败，再被 continue-on-error 静默吞掉 → 诊断命令（含最后的 git push
+        #    ci-logs）压根不执行 → ci-logs 永远不变 → 本机彻底失明（run14 现场就是这么
+        #    来的）。改为脚本内 `cd openwrt`（容错），即使目录不存在也能把 git push 跑完。
+        if: failure() || cancelled()
+        continue-on-error: true
+        run: |
+          {
+            cd openwrt 2>/dev/null || cd .
+            echo "run=${{ github.run_id }} attempt=${{ github.run_attempt }} target=$TARGET"
+            echo "job_status=${{ job.status }}"
+            echo "--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，"
+            echo "    而非编译失败。常见三因：① 超 timeout-minutes(330m) ② 6h runner 硬上限"
+            echo "    ③ concurrency cancel-in-progress（同一分支新推送抢跑）"
+            echo "    ④ GitHub Free 私有仓月度配额(2000min)耗尽 → job 排队未启动（日志会是空的）"
+            echo "--- .config 关键项 ---"
+            grep -E '^(CONFIG_TARGET_ROOTFS|CONFIG_IB|CONFIG_IB_STANDALONE|CONFIG_ALL_KMODS)' .config 2>/dev/null
+            grep -E '^CONFIG_PACKAGE_(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables|libip4tc|libip6tc|libiptext6|libiptext|xtables-legacy|xtables-nft)=' .config 2>/dev/null
+            echo "--- 内核镜像数（后缀随 KERNEL_SUFFIX 变；预期 > 0；target/linux/install 产出）---"
+            find build_dir/target-*/linux-[!f]* -maxdepth 1 \
+                 \( -name '*-kernel.bin' -o -name '*-kernel.itb' -o -name '*-uImage' \
+                    -o -name '*-uImage.itb' -o -name '*-zImage' -o -name '*-zImage.itb' \) 2>/dev/null | wc -l
+            find build_dir/target-*/linux-[!f]* -maxdepth 1 \
+                 \( -name '*-kernel.bin' -o -name '*-kernel.itb' -o -name '*-uImage' \
+                    -o -name '*-uImage.itb' -o -name '*-zImage' -o -name '*-zImage.itb' \) 2>/dev/null | head -5
+            echo "--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---"
+            # ⚠️ 2026-10-24 修正：原 `linux-*/` 会把 linux-firmware-20260221 也算进来，
+            #   掩盖真正的内核构建目录。用 linux-[!f]* 排除 firmware 目录。
+            ls build_dir/target-*/linux-[!f]*/ 2>/dev/null | head -20
+            echo "--- bin/packages 关键包（core 仓库那批）---"
+            find bin/packages -name '*.ipk' -printf '%f\n' 2>/dev/null \
+              | grep -E '^(curl|iptables-nft|iptables-zz-legacy|ip6tables-nft|ip6tables-zz-legacy|libxtables12|libip4tc2|libip6tc2|libiptext0|libiptext6-0)' \
+              | head -20
+            echo "--- filogic bootloader config 符号（mt7981 =y 行数 + jcg 样本）---"
+            grep -cE '^CONFIG_PACKAGE_(u-boot|trusted-firmware-a)-mt7981' .config 2>/dev/null
+            grep -E '^CONFIG_PACKAGE_u-boot-mt7981_jcg_q30-pro=|^CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=' .config 2>/dev/null || echo "(!! jcg uboot/tfa =y 缺失 → bootloader 前缀/过滤又错了)"
+            echo "--- IB 内 FIP/bl2 清单 + jcg 精确判定（诊断 FIP 门禁的根因现场）---"
+            IBDUMP=$(ls bin/targets/*/*/*imagebuilder*.tar.zst 2>/dev/null | head -1)
+            if [ -n "$IBDUMP" ]; then
+              echo "IB=$IBDUMP"
+              # 2026-10-25 加：内核镜像门禁失败时的直接现场（后缀随 KERNEL_SUFFIX 变，
+              # 只查 -kernel.bin 会在 qualcommax 上永远显示 0 而掩盖真相）
+              echo "IB 内内核镜像总数 = $(tar -tf "$IBDUMP" | grep -cE 'build_dir/.*/linux-[^/]+/[^/]+(-(kernel\.bin|kernel\.itb|uImage|uImage\.itb|fit-uImage\.itb|zImage|zImage\.itb|fit-zImage\.itb))(\.vboot)?$' || true)"
+              echo "FIP 总数 = $(tar -tf "$IBDUMP" | grep -cE 'image/[^/]+-u-boot\.fip$' || true)"
+              echo "bl2 总数 = $(tar -tf "$IBDUMP" | grep -cE 'image/[^/]+-bl2\.img$' || true)"
+              echo "jcg FIP / bl2 精确判定:"
+              tar -tf "$IBDUMP" | grep -E 'image/mt7981_jcg_q30-pro-u-boot\.fip$|image/mt7981-spim-nand-ddr3-bl2\.img$' || echo "(!! 缺 jcg FIP 或 bl2 → 即 FIP 门禁失败根因)"
+            else
+              echo "(未找到 IB tar.zst)"
+            fi
+            echo "--- Build 步 make 实际报错（末 80 行，ci-logs 失明时的唯一现场）---"
+            tail -80 /tmp/build.log 2>/dev/null || echo "(无 /tmp/build.log)"
+          } > /tmp/diag.txt 2>&1
+          cat /tmp/diag.txt
+          D=/tmp/cilog; rm -rf "$D"
+          if git clone --depth 1 -b ci-logs "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$D"; then
+            echo "ci-logs 分支已存在"
+          else
+            mkdir -p "$D"; git -C "$D" init -q -b ci-logs
+            # ⚠️ 2026-10-24 实锤：git init 后忘了加 origin → 下面 push origin 永远报
+            #   "fatal: 'origin' does not appear to be a git repository" → ci-logs 分支
+            #   永远建不出来，本机彻底失明。这里必须把 token URL 绑定为 origin。
+            git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            echo "ci-logs 分支不存在，本地新建并绑定 origin"
+          fi
+          mkdir -p "$D/logs"
+          cp /tmp/diag.txt "$D/logs/${{ github.run_id }}-${TARGET_SAFE}.txt"
+          git -C "$D" -c user.email=ci@local -c user.name=ci add -A
+          git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}"
+          git -C "$D" push origin HEAD:ci-logs
+
       - name: Create release
         # ⚠️ 本条件曾写 `inputs.make_release != false`——正是 env 注释里同款坑：
         #    push 触发时 inputs.* 全为 ''，而 GH 表达式里 `'' == false` 判定为 true
@@ -872,6 +1167,9 @@ jobs:
           #   - TARGET_SAFE 已在首个 step 把 "/" 换成 "-"（Git tag 禁 "/"，且 replace() 不是合法 GH 函数）；
           #   - VERSION_NUMBER 必须用 env（push 触发时 inputs.version_number 为空，
           #     env 已回退 '25.12-owai'，否则 tag 会残缺成 ib--mediatek-...）。
+          #   - commitish 显式指向本次运行的提交（github.sha），否则 action 会把 tag
+          #     打到默认分支 HEAD（main），丢失 CI 代码溯源（run4 实锤 tag 误指 main）。
+          commitish: ${{ github.sha }}
           tag_name: ib-${{ env.VERSION_NUMBER }}-${{ env.TARGET_SAFE }}-${{ github.run_id }}
           name: OWAI-aligned ImageBuilder ${{ matrix.target }} ${{ env.VERSION_NUMBER }}
           files: |
