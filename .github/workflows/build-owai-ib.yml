@@ -152,7 +152,10 @@ jobs:
         #   FIP/bl2/jcg 硬门禁——均已加 filogic-only 守卫（ipq807x/ipq60xx/armv8 不产 mt798x
         #   u-boot.fip/bl2，硬门禁会误杀）。kernel.bin 门禁保持全平台（CONFIG_IB 路径为所有
         #   设备产 <device>-kernel.bin）。
-        target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]') }}
+        # ⚠️ 2026-10-26 临时：用户要「单独跑 IPQ」验证（上次 run 被取消、ipq 还在 pending），
+        #   默认矩阵只留 qualcommax 两家，省配额(~350min)并隔离。验证完（ipq 出 tag 或落诊断）
+        #   需改回四平台做终验。
+        target: ${{ fromJson(inputs.targets || '["qualcommax/ipq807x","qualcommax/ipq60xx"]') }}
     steps:
       - name: Show parameters
         env:
@@ -681,7 +684,15 @@ jobs:
       - name: Download sources
         working-directory: openwrt
         run: |
-          make -j$(nproc) download V=s
+          # ⚠️ 2026-10-26：源下载易因 openwrt/feed 镜像瞬态抖动失败(wget 8 / 连接重置)，
+          #   裸跑无重试则整步红、job 失败（即 CI 侧「下载报错」根因）。加重试：最多 3 次，
+          #   间隔 15s。用户「查看下载报错原因，然后单独跑下」据此加固。
+          for i in 1 2 3; do
+            if make -j$(nproc) download V=s; then
+              echo "download OK (第 $i 次尝试)"; break
+            fi
+            echo "::warning::make download 第 $i 次失败，15s 后重试..."; sleep 15
+          done
 
       # ------------------------------------------------------------------
       # ⚠️ 构建顺序（OpenWrt 标准 phase 顺序，**必须显式逐级**，否则 top-level
