@@ -152,12 +152,10 @@ jobs:
         #   FIP/bl2/jcg 硬门禁——均已加 filogic-only 守卫（ipq807x/ipq60xx/armv8 不产 mt798x
         #   u-boot.fip/bl2，硬门禁会误杀）。kernel.bin 门禁保持全平台（CONFIG_IB 路径为所有
         #   设备产 <device>-kernel.bin）。
-        # ⚠️ 2026-10-26 临时：用户要「单独跑 IPQ」验证（上次 run 被取消、ipq 还在 pending），
-        #   默认矩阵只留 qualcommax 两家，省配额(~350min)并隔离。验证完（ipq 出 tag 或落诊断）
-        #   需改回四平台做终验。
-        #   2026-10-26 二次重跑：上一次 IPQ-only run 又被取消（无真编译报错，Dump 没机会推诊断），
-        #   本次重触发，**务必跑完不取消**（ipq 每 job ~3h，约 08:50 推、预计午间出终态）。
-        target: ${{ fromJson(inputs.targets || '["qualcommax/ipq807x","qualcommax/ipq60xx"]') }}
+        # ⚠️ 2026-10-26 IPQ-only 隔离验证已完成：run #52（98d38b9，15:05 推，2h2m2s 绿）
+        #   ipq807x+ipq60xx 双双出 tag/release → qca-ssdk 哈希修复 + 下载重试验证通过。
+        #   恢复四平台矩阵（filogic/ipq807x/ipq60xx/armv8）做最终终验。
+        target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]') }}
     steps:
       - name: Show parameters
         env:
@@ -1233,9 +1231,13 @@ jobs:
           #   - TARGET_SAFE 已在首个 step 把 "/" 换成 "-"（Git tag 禁 "/"，且 replace() 不是合法 GH 函数）；
           #   - VERSION_NUMBER 必须用 env（push 触发时 inputs.version_number 为空，
           #     env 已回退 '25.12-owai'，否则 tag 会残缺成 ib--mediatek-...）。
-          #   - commitish 显式指向本次运行的提交（github.sha），否则 action 会把 tag
-          #     打到默认分支 HEAD（main），丢失 CI 代码溯源（run4 实锤 tag 误指 main）。
-          commitish: ${{ github.sha }}
+          #   - target_commitish 显式指向本次运行的提交（github.sha），否则 action 会把 tag
+          #     打到默认分支 HEAD（main），丢失 CI 代码溯源。
+          #     ⚠️ 2026-10-26 晚实锤：此前写的键名 `commitish` 是 REST API 参数名，不是本 action
+          #        的输入名（softprops/action-gh-release 只认 `target_commitish`），未知输入被
+          #        静默忽略 → 历史上所有 tag 一直误指 main（661c2a4/07aec45d/eb9f4ef 全在 main
+          #        历史上）。修正键名后 tag 才真正落到触发 commit。
+          target_commitish: ${{ github.sha }}
           tag_name: ib-${{ env.VERSION_NUMBER }}-${{ env.TARGET_SAFE }}-${{ github.run_id }}
           name: OWAI-aligned ImageBuilder ${{ matrix.target }} ${{ env.VERSION_NUMBER }}
           files: |
