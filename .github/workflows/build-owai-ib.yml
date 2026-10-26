@@ -155,6 +155,8 @@ jobs:
         # ⚠️ 2026-10-26 临时：用户要「单独跑 IPQ」验证（上次 run 被取消、ipq 还在 pending），
         #   默认矩阵只留 qualcommax 两家，省配额(~350min)并隔离。验证完（ipq 出 tag 或落诊断）
         #   需改回四平台做终验。
+        #   2026-10-26 二次重跑：上一次 IPQ-only run 又被取消（无真编译报错，Dump 没机会推诊断），
+        #   本次重触发，**务必跑完不取消**（ipq 每 job ~3h，约 08:50 推、预计午间出终态）。
         target: ${{ fromJson(inputs.targets || '["qualcommax/ipq807x","qualcommax/ipq60xx"]') }}
     steps:
       - name: Show parameters
