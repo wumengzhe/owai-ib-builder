@@ -415,6 +415,26 @@ jobs:
               print("[imagebuilder/Makefile] !! 未匹配 SIGNATURE_CHECK 锚点"); sys.exit(1)
           PY
 
+      # ⚠️ 2026-10-26：qca-ssdk（Qualcomm SSDK 交换芯片驱动，仅 TARGET_qualcommax 选中，
+      #   ipq807x/ipq60xx 必编）的 PKG_MIRROR_HASH 在 GitHub Actions runner 的 **git 2.55.0**
+      #   下与 `git archive` 实际产出不符：qca-ssdk 仓库带触发归档差异的 .gitattributes，
+      #   git 新版本归档方式变了 → 下载期 "Hash mismatch" 整盘失败（ipq807x/ipq60xx 都挂在它，
+      #   filogic/armv8 不受影响）。openwrt 上游该包哈希是钉死值，且 REF 不钉版→随 HEAD 漂移，
+      #   此失配在 IPQ 上次跑通(07aec45d/661c2a4)之后上游改东西引入。
+      #   修复：把 PKG_MIRROR_HASH 改成 git 2.55.0 实际产出的哈希值（取自失败 run 的 got 值），
+      #   放行下载。钉死值随 runner git 版本变动可能再变——若日后重挂，回此处刷新哈希即可。
+      - name: Patch qca-ssdk PKG_MIRROR_HASH (git-2.55.0 .gitattributes workaround)
+        working-directory: openwrt
+        run: |
+          F=package/kernel/qca-ssdk/Makefile
+          if [ -f "$F" ]; then
+            NEW=da990d2956db471071568fd6c7c9193b075f9a1e87e5ae5ac8729cc4dba9dc24
+            sed -i "s#^PKG_MIRROR_HASH:=.*#PKG_MIRROR_HASH:=$NEW#" "$F"
+            echo "qca-ssdk PKG_MIRROR_HASH -> $(grep '^PKG_MIRROR_HASH' "$F")"
+          else
+            echo "qca-ssdk Makefile 不存在（非 qualcommax 目标可忽略）"
+          fi
+
       - name: Exclude openwrt_one device (IB build quirk)
         # openwrt_one 的组合固件 artifact（nor/snand-preloader.bin 等）依赖 phony 目标
         # `openwrt_one-images`，该目标只在【完整 image 构建上下文】定义、IB 构建期不定义 →
@@ -1091,13 +1111,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ⚠️ 本机没有 GitHub token，读不到 Actions 的 job 日志（私有仓）。失败时把关键现场
-      #    推到 **ci-logs-runs/<run_id>-<target>** 独立 ref（每个平台一个，互不冲突），
-      #    我这边用 git + SSH 就能取回逐个排查。
-      #    ⚠️ 绝不能推回 ci-filogic（那会又触发一次 workflow → 死循环），所以用独立 ref。
-      #    ci-logs-runs/* 是临时诊断 ref，整轮修完会连同 ci-filogic 一起清理。
-      #    ⚠️ 2026-10-25 起废弃单一 ci-logs 汇总分支：四平台并行失败时 depth-1 clone 同基
-      #       再 push 会 non-fast-forward 被 continue-on-error 静默吞 → 本机失明。独立 ref
-      #       彻底消除该竞争。
+      #    推到 **ci-logs 分支**的 logs/<run_id>-<target>.txt（每平台一个文件，文件名唯一互不
+      #    冲突），我这边用 git + SSH（git fetch origin ci-logs）就能取回逐个排查。
+      #    ⚠️ 绝不能推回 ci-filogic（那会又触发一次 workflow → 死循环）。
+      #    ci-logs 是长期诊断分支，整轮修完保留即可（旧诊断可追溯历史）。
+      #    ⚠️ 2026-10-26 修正：此前推 ci-logs-runs/* 独立 ref 在 runner 侧静默失败→本机失明；
+      #       改回推既有 ci-logs 分支（已实证可读），文件名带 run_id+target 唯一不冲突，
+      #       并发同推由 pull --rebase + 重试兜底。
       - name: Dump diagnostics to ci-logs branch (on failure)
         # ⚠️ 2026-10-25 补 `|| cancelled()`：job 被取消（6h runner 硬上限 / 手工 cancel /
         #    concurrency cancel-in-progress 抢跑）时状态是 **cancelled 而非 failure**，
@@ -1160,14 +1180,13 @@ jobs:
           } > /tmp/diag.txt 2>&1
           cat /tmp/diag.txt
           D=/tmp/cilog; rm -rf "$D"
-          # ⚠️⚠️ 2026-10-25 改：每个平台失败诊断推到【独立 ref】refs/heads/ci-logs-runs/<run_id>-<target>，
-          #    消除四平台并行失败时的 non-fast-forward 被吞。2026-10-25 深夜修正：改用**克隆既有 ci-logs
-          #    分支**再推送（此前用 git init 空仓库，空仓下 HEAD 无可推送提交 → push 静默失败被吞，导致
-          #    监控再次失明）。克隆法此前已实证可认证/可达（ci-logs 旧分支成功推送过）。
+          # ⚠️ 克隆既有 ci-logs 分支再推送（此前用 git init 空仓库或 ci-logs-runs 独立 ref 都在
+          #    runner 侧静默失败→本机失明）。ci-logs 已实证可读；文件名带 run_id+target 唯一，
+          #    四平台并行也不冲突内容；并发同推同一 ref 由下方 pull --rebase + 重试兜底。
           if git clone --depth 1 -b ci-logs "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$D" 2>/dev/null; then
             echo "ci-logs 分支已存在，克隆成功"
           else
-            mkdir -p "$D"; git -C "$D" init -q -b ci-logs-runs
+            mkdir -p "$D"; git -C "$D" init -q -b ci-logs
             git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
             echo "ci-logs 分支不存在，本地新建并绑定 origin（首次）"
           fi
@@ -1177,17 +1196,22 @@ jobs:
           cp /tmp/diag.txt "./diag-${TARGET_SAFE}-${{ github.run_id }}.txt"
           git -C "$D" -c user.email=ci@local -c user.name=ci add -A
           git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}" || echo "(ci-logs 无新内容可提交)"
-          RUNREF="ci-logs-runs/${{ github.run_id }}-${TARGET_SAFE}"
+          # ⚠️ 推到【既有 ci-logs 分支】（本机 git fetch origin ci-logs 可读）；文件名带
+          #   run_id+target 唯一，四平台并行也不冲突内容；并发同推同一 ref 由 pull --rebase
+          #   + 重试兜底。此前推 ci-logs-runs/* 独立 ref 在 runner 侧静默失败→本机失明，已弃用。
+          RUNREF="ci-logs"
           ok=0
           for attempt in 1 2 3; do
-            if git -C "$D" push origin "HEAD:refs/heads/$RUNREF" 2>/dev/null; then ok=1; break; fi
-            echo "push 独立 ref 尝试 $attempt 失败，重试..."; sleep 5
+            git -C "$D" pull --rebase origin "$RUNREF" >/dev/null 2>&1 || true
+            if git -C "$D" push origin "HEAD:refs/heads/$RUNREF"; then ok=1; break; fi
+            echo "push ci-logs 尝试 $attempt 失败，重试..."; sleep 5
           done
-          [ "$ok" = "1" ] && echo "✓ 诊断已推到 refs/heads/$RUNREF（本机 git ls-remote 必见）" || echo "!! 独立 ref 推送失败（网络？但 artifact 已留底，可去 Actions UI 取）"
+          [ "$ok" = "1" ] && echo "✓ 诊断已推到 ci-logs（本机 git fetch origin ci-logs 可读 logs/${{ github.run_id }}-${TARGET_SAFE}.txt）" || echo "!! ci-logs 推送失败（但 artifact 已留底，可去 Actions UI 取）"
 
       - name: Upload diagnostics artifact (on failure, fallback)
         # git push 失败时仍可从 Actions UI 下载诊断（非阻塞）。诊断同时落在
-        #   refs/heads/ci-logs-runs/<run_id>-<target>（本机 git ls-remote 可读）与 Action artifact。
+        #   ci-logs 分支（本机 git fetch origin ci-logs 可读 logs/<run_id>-<target>.txt）
+        #   与 Action artifact。
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
