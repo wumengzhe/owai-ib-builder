@@ -1,0 +1,131 @@
+run=41185872539 attempt=1 target=mediatek/filogic
+job_status=failure
+--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，
+    而非编译失败。常见三因：① 超 timeout-minutes(330m) ② 6h runner 硬上限
+    ③ concurrency cancel-in-progress（同一分支新推送抢跑）
+    ④ GitHub Free 私有仓月度配额(2000min)耗尽 → job 排队未启动（日志会是空的）
+--- .config 关键项 ---
+CONFIG_TARGET_ROOTFS_INITRAMFS=y
+CONFIG_TARGET_ROOTFS_INITRAMFS_SEPARATE=y
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_TARGET_ROOTFS_PARTSIZE=448
+CONFIG_ALL_KMODS=y
+CONFIG_TARGET_ROOTFS_DIR=""
+CONFIG_IB=y
+CONFIG_IB_STANDALONE=y
+CONFIG_PACKAGE_libip4tc=y
+CONFIG_PACKAGE_libip6tc=y
+CONFIG_PACKAGE_libiptext=y
+CONFIG_PACKAGE_libiptext6=y
+CONFIG_PACKAGE_libxtables=y
+CONFIG_PACKAGE_curl=y
+--- 内核镜像数（后缀随 KERNEL_SUFFIX 变；预期 > 0；target/linux/install 产出）---
+0
+--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---
+button-hotplug
+cryptodev-linux-cryptodev-linux-1.14
+dmx_usb_module-19.12.1
+dsa-rtl837x-2026-07-30-e306c165
+fullconenat-nft-2023-05-17-07d93b62
+gpio-button-hotplug
+iptables-1.8.7
+jool-4.1.13
+leds-ws2812b
+libpfring-9.2.0
+linux-6.12.114
+linux-atm-2.5.2
+mdio-netlink-1.3.2
+mtd
+mtd-rw-git-20160214
+nat46-2026-07-01-adb2f72e
+natflow-20260930
+nft-geoip
+oaf
+open-app-filter-2025-07-03-a9e4637b
+--- bin/packages 关键包（core 仓库那批）---
+--- filogic bootloader config 符号（mt7981 =y 行数 + jcg 样本）---
+20
+CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=y
+--- IB 内 FIP/bl2 清单 + jcg 精确判定（诊断 FIP 门禁的根因现场）---
+(未找到 IB tar.zst)
+--- Build 步 make 实际报错（末 80 行，ci-logs 失明时的唯一现场）---
+  /bytes.0
+  /charnames.0
+  /constant.0
+  /deprecate.0
+  /diagnostics.0
+  /encoding.0
+  /encoding::warnings.0
+  /experimental.0
+  /feature.0
+  /fields.0
+  /filetest.0
+  /if.0
+  /integer.0
+  /less.0
+  /lib.0
+  /locale.0
+  /mro.0
+  /ok.0
+  /open.0
+  /ops.0
+  /overload.0
+  /overloading.0
+  /parent.0
+  /re.0
+  /sigtrap.0
+  /sort.0
+  /strict.0
+  /subs.0
+  /threads.0
+  /threads::shared.0
+  /utf8.0
+  /vars.0
+  /version.0
+  /version::Internals.0
+  /vmsish.0
+  /warnings.0
+  /warnings::register.0
+  /pod2man.0
+  /pod2text.0
+  /pod2usage.0
+  /podchecker.0
+  /podselect.0
+  /cpan.0
+  /corelist.0
+  /enc2xs.0
+  /encguess.0
+  /h2ph.0
+  /h2xs.0
+  /instmodsh.0
+  /json_pp.0
+  /libnetcfg.0
+  /perlbug.0
+  /perlthanks.0
+  /perlivp.0
+  /piconv.0
+  /pl2pm.0
+  /pod2html.0
+  /prove.0
+  /ptar.0
+  /ptardiff.0
+  /ptargrep.0
+  /shasum.0
+  /splain.0
+  /xsubpp.0
+  /zipdetails.0
+make[3]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/perl/perl-5.28.1'
+touch /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/perl/perl-5.28.1/.built
+rm -rf /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl
+mkdir -p /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl/host /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/packages
+install -d -m0755 /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl/usr/lib/perl5/5.28
+cp -fpR /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/perl/perl-5.28.1/ipkg-install/usr/lib/perl5/5.28 /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl/usr/lib/perl5/
+find /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl -name '*.la' | xargs -r rm -f; 
+if [ -f /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/packages/perl.list ]; then /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/scripts/clean-package.sh "/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/packages/perl.list" "/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl"; fi
+if [ -d /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl ]; then (cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl; find ./ > /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl.files); 	SHELL= flock /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/.staging-dir.flock -c ' mv /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl.files /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/packages/perl.list && cp -fpR /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl/* /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/; '; fi
+rm -rf /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tmp/stage-perl
+touch /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/stamp/.perl_installed
+make[2]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/feeds/packages/lang/perl'
+time: package/feeds/packages/perl/compile#285.71#34.59#128.72
+make[1]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt'
+make: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/include/toplevel.mk:231: package/compile] Error 2
