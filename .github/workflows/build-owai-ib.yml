@@ -42,9 +42,14 @@ on:
         required: false
         default: '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]'
       openwrt_branch:
-        description: 'openwrt/openwrt 分支。改 master 则内核升到 6.18 代（qualcommax/rockchip 的 config-6.18 已就位）；openwrt-25.12 为 6.12 代'
+        # ⚠️ 2026-10-31 起源码改为从 wumengzhe/lede fork 克隆（见下方 Clone 步 repository），
+        #    故本输入默认分支也一并改为 wmz-lede-multisize（原 openwrt/openwrt@openwrt-25.12 不再使用）。
+        #    填 master 仍会升到 6.18 代（qualcommax/rockchip 的 config-6.18 已就位）；
+        #    wmz-lede-multisize 为 6.12 代（与 owai 25.12 对齐，且含我们的设备移植）。
+        description: 'wumengzhe/lede 分支（fork 源）。默认 wmz-lede-multisize（6.12 代，含 S20/Keenetic/Netcraze 移植）；改 master 则内核升到 6.18 代'
         required: true
-        default: 'openwrt-25.12'
+        # default: 'openwrt-25.12'   # ← 原默认值（openwrt/openwrt 上游分支），2026-10-31 弃用
+        default: 'wmz-lede-multisize'
       openwrt_ref:
         # ✅ 2026-10-25 用户明确：「内核版本不一定非得控制在 6.12.108」——故取消默认钉版，
         #    改为**跟随 openwrt_branch 的分支 HEAD**（每次 CI 拉该分支最新提交）。
@@ -108,7 +113,8 @@ env:
   # ⚠️ TARGET 不能放全局 env：全局 env 不支持 matrix 上下文（报 Unrecognized named-value）。
   #    改为在首个 step 用「矩阵 step 级 env」写入 $GITHUB_ENV（见 Show parameters），
   #    同时生成 TARGET_SAFE（把 / 换成 -，供 artifact 名 / Release tag 用，Git tag 禁 /）。
-  BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}
+  # BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}   # ← 原：openwrt/openwrt 上游分支，2026-10-31 弃用
+  BRANCH: ${{ inputs.openwrt_branch || 'wmz-lede-multisize' }}   # ← 新：wumengzhe/lede fork 分支（含设备移植）
   # ✅ 2026-10-25 起 REF 默认为空 = **不钉版**，随 BRANCH 的 HEAD 走（用户明确「内核版本
   #    不一定非得控制在 6.12.108」）。需要复现/二分时由 inputs.openwrt_ref 传完整 40 位 sha
   #    即可回到钉版。Schedule 触发时 inputs.* 全空，这里也就保持空 → 定时构建自动取最新。
@@ -208,7 +214,8 @@ jobs:
       - name: Clone openwrt source
         uses: actions/checkout@v4
         with:
-          repository: openwrt/openwrt
+          # repository: openwrt/openwrt   # ← 原：官方上游仓，2026-10-31 弃用（不含我们的设备移植）
+          repository: wumengzhe/lede      # ← 新：私有 fork，含 S20/S20M/S20P、Keenetic KN-4410、Netcraze NC-3411/NC-4410 移植
           # REF 为空 → 取 BRANCH 的 HEAD（不钉版，默认行为）；REF 有值 → 钉那个 sha。
           # 下一步会打印 SOURCE=<完整 sha>，即使是随 HEAD 走的构建也能精确溯源。
           ref: ${{ env.REF || env.BRANCH }}
