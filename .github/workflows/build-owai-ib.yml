@@ -323,25 +323,36 @@ jobs:
           #    → IB 本地必须出，补拷是唯一正解。
           p = "target/imagebuilder/Makefile"
           s = open(p).read()
-          anchor = ("\t$(FIND) $(wildcard $(PACKAGE_SUBDIRS)) -type f -name '*.$(PACKAGE_SUFFIX)' \\\n"
-                    "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n"
-                    "endif")
-          inject = ("\t$(FIND) $(wildcard $(PACKAGE_SUBDIRS)) -type f -name '*.$(PACKAGE_SUFFIX)' \\\n"
-                    "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n"
-                    "\t# wmz 补丁 2026-10-21: PACKAGE_SUBDIRS 不含 bin/targets/<t>/<s>/packages,\n"
-                    "\t# 而 target 专属包(base-files/libc/kernel/firewall4/uci/netifd/dnsmasq-full...)\n"
-                    "\t# 全打在那里; STANDALONE 必须一并拷入, 否则 IB 缺核心用户态链(组装 opkg Unknown)。\n"
-                    "\t$(FIND) $(TOPDIR)/bin/targets -type f -name '*.$(PACKAGE_SUFFIX)' \\\n"
-                    "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n"
-                    "endif")
-          if anchor in s:
-              s = s.replace(anchor, inject, 1)
-              open(p, "w").write(s)
-              print("[imagebuilder/Makefile] STANDALONE 补拷 bin/targets 已注入")
-          elif "wmz 补丁 2026-10-21" in s:
+          # ⚠️ 2026-10-31：克隆源改为 wumengzhe/lede（LEDE master 代）后，
+          #    其 imagebuilder/Makefile 的 STANDALONE 分支写的是字面量 '-name *.ipk'，
+          #    且外层多包一层 ifeq(CONFIG_BUILDBOT) → endif 缩进为 "  endif"，
+          #    旧的上游 25.12 锚点（PACKAGE_SUFFIX + 顶层 endif）不匹配 → run54 四平台
+          #    在本步 1 分钟内全挂。现改为「插入式」补丁：只锚 FIND 两行、在其后追加
+          #    bin/targets 补拷行，不吞 endif（对缩进/非缩进 endif 都安全）。
+          #    两个锚点按序尝试：LEDE(*.ipk) 优先，上游 25.12(PACKAGE_SUFFIX) 兜底。
+          inject_lines = (
+              "\t# wmz 补丁 2026-10-31: PACKAGE_SUBDIRS 不含 bin/targets/<t>/<s>/packages,\n"
+              "\t# 而 target 专属包(base-files/libc/kernel/firewall4/uci/netifd/dnsmasq-full...)\n"
+              "\t# 全打在那里; STANDALONE 必须一并拷入, 否则 IB 缺核心用户态链(组装 opkg Unknown)。\n"
+              "\t$(FIND) $(TOPDIR)/bin/targets -type f -name '*.ipk' \\\n"
+              "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n"
+          )
+          anchor_lede = ("\t$(FIND) $(wildcard $(PACKAGE_SUBDIRS)) -type f -name '*.ipk' \\\n"
+                         "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n")
+          anchor_up = ("\t$(FIND) $(wildcard $(PACKAGE_SUBDIRS)) -type f -name '*.$(PACKAGE_SUFFIX)' \\\n"
+                       "\t\t-exec $(CP) -t $(PKG_BUILD_DIR)/packages/ {} +\n")
+          if "wmz 补丁 2026-10-31: PACKAGE_SUBDIRS" in s:
               print("[imagebuilder/Makefile] bin/targets 补拷已存在，跳过（幂等）")
+          elif anchor_lede in s:
+              s = s.replace(anchor_lede, anchor_lede + inject_lines, 1)
+              open(p, "w").write(s)
+              print("[imagebuilder/Makefile] STANDALONE 补拷 bin/targets 已注入（LEDE *.ipk 锚点）")
+          elif anchor_up in s:
+              s = s.replace(anchor_up, anchor_up + inject_lines, 1)
+              open(p, "w").write(s)
+              print("[imagebuilder/Makefile] STANDALONE 补拷 bin/targets 已注入（上游 PACKAGE_SUFFIX 锚点）")
           else:
-              print("[imagebuilder/Makefile] !! 未匹配 STANDALONE FIND 锚点，请检查 openwrt 源码"); sys.exit(1)
+              print("[imagebuilder/Makefile] !! 未匹配 STANDALONE FIND 锚点（LEDE 与上游形态均未命中），请检查 openwrt 源码"); sys.exit(1)
 
           # 5) target/imagebuilder/Makefile —— STANDALONE 下也必须强制拷 base-files/libc/kernel
           #
@@ -383,14 +394,16 @@ jobs:
           #   这些行属同一个 recipe 的续行，TAB 是 make 的 recipe 标识，换成空格即语法错误。
           #   → 下面所有行一律 "\t" 开头，并在注入后逐行自校验（见 _assert_tabs）。
           force_lines = [
-              "\t# wmz 补丁 2026-10-22: 无条件强制拷入 base-files/libc/kernel。",
+              "\t# wmz 补丁 2026-10-31: 无条件强制拷入 base-files/libc/kernel。",
               "\t# 官方只在非 STANDALONE 分支做此事；STANDALONE 分支这三个包若未被",
               "\t# .config 选中就不会编译，IB 直接缺失 → assembler opkg Unknown package。",
+              "\t# 2026-10-31：改用字面量 *_*.ipk 模式 —— LEDE master 不定义",
+              "\t# PACKAGE_VERSION_SEPARATOR/PACKAGE_SUFFIX，字面量对 opkg 恒成立。",
               "\t$(FIND) $(call FeedPackageDir,libc) -type f \\",
               "\t  \\( \\",
-              "\t\t-name 'base-files$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\",
-              "\t\t-name 'libc$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' -or \\",
-              "\t\t-name 'kernel$(PACKAGE_VERSION_SEPARATOR)*.$(PACKAGE_SUFFIX)' \\) \\",
+              "\t\t-name 'base-files_*.ipk' -or \\",
+              "\t\t-name 'libc_*.ipk' -or \\",
+              "\t\t-name 'kernel_*.ipk' \\) \\",
               "\t  -exec $(CP) -t $(PKG_BUILD_DIR)/packages {} +",
           ]
           def _assert_tabs(lines, tag):
@@ -404,17 +417,17 @@ jobs:
                       sys.exit(1)
           _assert_tabs(force_lines, "强制拷补丁")
           force = "endif\n\n" + "\n".join(force_lines) + "\n\nifneq ($(CONFIG_SIGNATURE_CHECK),)"
-          if anchor2 in s and "wmz 补丁 2026-10-22" not in s:
+          if anchor2 in s and "wmz 补丁 2026-10-31: 无条件强制拷入" not in s:
               s = s.replace(anchor2, force, 1)
               open(p, "w").write(s)
               # 落盘后再全校验一遍：确保注入区每行都合规（防手改回归）
               _chk = [l for l in open(p).read().splitlines()
-                      if "FeedPackageDir,libc" in l or "base-files$(PACKAGE_VERSION_SEPARATOR)" in l]
+                      if "FeedPackageDir,libc" in l or "base-files_*.ipk" in l]
               _bad = [l for l in _chk if l.strip() and not l.startswith("\t")]
               if _bad:
                   print("[imagebuilder/Makefile] !! 注入后校验失败，未以 TAB 开头 %d 行" % len(_bad)); sys.exit(1)
               print("[imagebuilder/Makefile] 无条件强制拷 base-files/libc/kernel 已注入（TAB 校验通过）")
-          elif "wmz 补丁 2026-10-22" in s:
+          elif "wmz 补丁 2026-10-31: 无条件强制拷入" in s:
               print("[imagebuilder/Makefile] 强制拷补丁已存在，跳过")
           else:
               print("[imagebuilder/Makefile] !! 未匹配 SIGNATURE_CHECK 锚点"); sys.exit(1)
