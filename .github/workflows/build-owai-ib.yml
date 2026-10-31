@@ -521,6 +521,14 @@ jobs:
             #   → assembler §4 静默剔除 → 插件不进固件（2026-10-02 实锤过的故障模式）。
             #   Kwrt 的 IB 内 .config 实锤：CONFIG_ALL_KMODS=y → 1418 ipk 含 985 个 kmod。
             echo "CONFIG_ALL_KMODS=y"
+            # ⚠️ 2026-10-31 run 41198243546 实锤：nat46（package/kernel/nat46，NAT46
+            #   无状态转换，消费级路由器默认不需要）在 wmz-lede-multisize 的 6.12.114 上
+            #   编译失败（nat46-netdev.o Error 1），且它是无人维护的树外模块，对 6.12 新
+            #   内核兼容性差。ALL_KMODS 会把它扫进来编 → 整盘失败。显式 =N 单独剔除
+            #   （不影响其他 ~984 个 kmod），比整体关 ALL_KMODS 安全（关 ALL_KMODS 会让
+            #   IB 缺 kmod → assembler §4 静默剔包，见上方 ALL_KMODS 注释）。若后续需要
+            #   nat46 可回头给它打 6.12 适配补丁，再移除本行。
+            echo "CONFIG_PACKAGE_kmod-nat46=N"
             # ⚠️⚠️ KERNEL_WERROR 必须关（2026-10-20 run 39371381477 实锤）：
             #   ALL_KMODS 会把 kiddin9 feed 里的 vendored 内核包也扫进来编译，例如
             #   quectel_MHI（pcie_mhi-1.3.8）在 6.12.108 上：
@@ -779,7 +787,11 @@ jobs:
           #    GH 默认 shell 已带 -o pipefail，make 真实退出码仍能触发本步失败；
           #    同时 /tmp/build.log 供失败时的 Dump 步抓取——否则 ci-logs 一旦失明，
           #    我们连 make 报什么错都看不到（这正是 run2 失明的原因）。
-          { make -j$(nproc) tools/install toolchain/install target/compile \
+          # ⚠️ 2026-10-31 起加 -k（keep-going）：并行构建下首个 kmod 失败就会 abort，
+          #    看不出还有哪些 kmod 也编不过。-k 让 make 跳过失败目标继续编其余，最终
+          #    仍因任一目标失败返回非零（CI 门禁不失效），但 /tmp/build.log 会集齐所有
+          #    失败包，便于一次性定位、批量修复（避免 2~4h 一轮的打地鼠）。
+          { make -k -j$(nproc) tools/install toolchain/install target/compile \
                           package/compile package/install target/linux/install \
                           target/imagebuilder/compile V=s
           } 2>&1 | tee /tmp/build.log
@@ -1199,7 +1211,7 @@ jobs:
             if [ -f /tmp/build.log ]; then
               echo "build.log 行数 = $(wc -l < /tmp/build.log)"
               echo "--- ① 全部 make 失败目标行（\\*\\*\\*）---"
-              grep -nE 'make\[[0-9]+\]: \*\*\*' /tmp/build.log | head -20
+              grep -nE 'make\[[0-9]+\]: \*\*\*' /tmp/build.log | head -300
               echo "--- ② 首个失败目标上下文（前 40 行 + 后 10 行）---"
               L=$(grep -nE 'make\[[0-9]+\]: \*\*\*' /tmp/build.log | head -1 | cut -d: -f1)
               if [ -n "$L" ]; then
@@ -1207,7 +1219,7 @@ jobs:
                 sed -n "${S},${E}p" /tmp/build.log
               fi
               echo "--- ③ 常见错误模式行（error/ERROR/undefined/No rule/missing）---"
-              grep -nE '(^| )ERROR:|error:|undefined reference|No rule to make target|is missing dependencies|not found' /tmp/build.log | head -40
+              grep -nE '(^| )ERROR:|error:|undefined reference|No rule to make target|is missing dependencies|not found' /tmp/build.log | head -300
               echo "--- ④ 末尾 100 行 ---"
               tail -100 /tmp/build.log
             else
