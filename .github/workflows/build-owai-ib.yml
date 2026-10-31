@@ -1193,8 +1193,26 @@ jobs:
             else
               echo "(未找到 IB tar.zst)"
             fi
-            echo "--- Build 步 make 实际报错（末 80 行，ci-logs 失明时的唯一现场）---"
-            tail -80 /tmp/build.log 2>/dev/null || echo "(无 /tmp/build.log)"
+            echo "--- Build 步 make 实际报错（2026-10-31 二次修：run55 尾部80行只有 perl 收尾+Error 2，"
+            echo "    并行 make 下真凶在日志中部。改为：① 所有 make[?]*** 失败目标行 ② 首个失败目标"
+            echo "    前后上下文 ③ 常见错误模式行 ④ 尾部100行）---"
+            if [ -f /tmp/build.log ]; then
+              echo "build.log 行数 = $(wc -l < /tmp/build.log)"
+              echo "--- ① 全部 make 失败目标行（\\*\\*\\*）---"
+              grep -nE 'make\[[0-9]+\]: \*\*\*' /tmp/build.log | head -20
+              echo "--- ② 首个失败目标上下文（前 40 行 + 后 10 行）---"
+              L=$(grep -nE 'make\[[0-9]+\]: \*\*\*' /tmp/build.log | head -1 | cut -d: -f1)
+              if [ -n "$L" ]; then
+                S=$(( L > 40 ? L - 40 : 1 )); E=$(( L + 10 ))
+                sed -n "${S},${E}p" /tmp/build.log
+              fi
+              echo "--- ③ 常见错误模式行（error/ERROR/undefined/No rule/missing）---"
+              grep -nE '(^| )ERROR:|error:|undefined reference|No rule to make target|is missing dependencies|not found' /tmp/build.log | head -40
+              echo "--- ④ 末尾 100 行 ---"
+              tail -100 /tmp/build.log
+            else
+              echo "(无 /tmp/build.log)"
+            fi
           } > /tmp/diag.txt 2>&1
           cat /tmp/diag.txt
           D=/tmp/cilog; rm -rf "$D"
