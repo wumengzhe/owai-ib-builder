@@ -470,6 +470,48 @@ jobs:
             echo "openwrt_one 不在 filogic 设备列表或文件不存在，跳过（仅 filogic 有此设备）"
           fi
 
+      - name: Force kernel 6.18 (fix mac80211/nat46 netns_local on filogic/ipq)
+        # run16/run17 实锤：fork wmz-lede-multisize 的 mediatek/qualcommax 默认
+        # KERNEL_PATCHVER:=6.12，但 package/kernel/mac80211/Makefile:13-14 对 6.12 与
+        # 6.18 都吃 backports 6.18.39，而 6.18.39 引用 6.13+ 才有的
+        # struct net_device.netns_local → 6.12 下 mac80211(WiFi) 与 nat46 整段编不过
+        # （netns_local 缺失：nat46-netdev.c:124 / mac80211 core.c:168,176,192,200,1556）。
+        # 用户 2026-10-31 决策：全平台切 6.18。rockchip/armv8 本就 6.18（sed 幂等）。
+        # 注意：此 sed 必须在 defconfig 之前（Generate .config 步之前），否则 KERNEL_PATCHVER
+        # 不生效。本步位于 feeds/defconfig 之前，满足。
+        working-directory: openwrt
+        run: |
+          for f in target/linux/mediatek/Makefile target/linux/qualcommax/Makefile target/linux/rockchip/Makefile; do
+            if [ -f "$f" ]; then
+              sed -i 's/^KERNEL_PATCHVER:=6.12/KERNEL_PATCHVER:=6.18/' "$f"
+              echo "$f -> $(grep -E '^KERNEL_PATCHVER' "$f")"
+            else
+              echo "$f 不存在，跳过"
+            fi
+          done
+
+      - name: Drop orphaned cmcc_rax3000me u-boot variants (undefined board_init)
+        # run17 实锤：package/boot/uboot-mediatek/Makefile 列了 3 个 mt7981_cmcc_rax3000me
+        # 变体（emmc/nand-ddr3/nand-ddr4，define 块 + build 列表三行），但 filogic.mk 无
+        # 对应设备档案（orphaned）→ 编译 u-boot-2025.10/common/board_r.c:678
+        # undefined reference to 'board_init'。这 3 个变体是半吊子移植，直接删掉。
+        working-directory: openwrt
+        run: |
+          F=package/boot/uboot-mediatek/Makefile
+          if [ -f "$F" ]; then
+            sed -i \
+              -e '/define U-Boot\/mt7981_cmcc_rax3000me-emmc/,/^endef/d' \
+              -e '/define U-Boot\/mt7981_cmcc_rax3000me-nand-ddr3/,/^endef/d' \
+              -e '/define U-Boot\/mt7981_cmcc_rax3000me-nand-ddr4/,/^endef/d' \
+              -e '/mt7981_cmcc_rax3000me-emmc \\$/d' \
+              -e '/mt7981_cmcc_rax3000me-nand-ddr3 \\$/d' \
+              -e '/mt7981_cmcc_rax3000me-nand-ddr4 \\$/d' \
+              "$F"
+            echo "cmcc_rax3000me 变体剩余定义数: $(grep -c 'mt7981_cmcc_rax3000me' "$F")"
+          else
+            echo "uboot-mediatek Makefile 不存在，跳过"
+          fi
+
       - name: Update and install feeds
         working-directory: openwrt
         run: |
@@ -1218,9 +1260,13 @@ jobs:
                 S=$(( L > 40 ? L - 40 : 1 )); E=$(( L + 10 ))
                 sed -n "${S},${E}p" /tmp/build.log
               fi
-              echo "--- ③ 常见错误模式行（error/ERROR/undefined/No rule/missing）---"
-              grep -nE '(^| )ERROR:|error:|undefined reference|No rule to make target|is missing dependencies|not found' /tmp/build.log | head -300
-              echo "--- ④ 末尾 100 行 ---"
+              echo "--- ③ 常见错误模式行（error/ERROR/Error/undefined/No rule/missing/DTC）---"
+              grep -nE '(^| )(ERROR|Error):|error:|undefined reference|No rule to make target|is missing dependencies|not found|dtc:|DTC|Reference to non-existent|duplicate (label|node)|syntax error' /tmp/build.log | head -400
+              echo "--- ③b missing-dependencies 上下文（列出缺失的具体 .so）---"
+              grep -n -A8 "missing dependencies for the following libraries:" /tmp/build.log | head -40
+              echo "--- ④ DTC / 设备树编译错误（DTC 用 'Error:' 大写，易被漏抓）---"
+              grep -nE "Error: |dtc: |DTC: |Reference to non-existent|invalid type|syntax error" /tmp/build.log | head -80
+              echo "--- ⑤ 末尾 100 行 ---"
               tail -100 /tmp/build.log
             else
               echo "(无 /tmp/build.log)"
