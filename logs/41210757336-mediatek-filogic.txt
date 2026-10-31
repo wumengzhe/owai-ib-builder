@@ -1,0 +1,540 @@
+run=41210757336 attempt=1 target=mediatek/filogic
+job_status=failure
+--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，
+    而非编译失败。常见三因：① 超 timeout-minutes(330m) ② 6h runner 硬上限
+    ③ concurrency cancel-in-progress（同一分支新推送抢跑）
+    ④ GitHub Free 私有仓月度配额(2000min)耗尽 → job 排队未启动（日志会是空的）
+--- .config 关键项 ---
+CONFIG_TARGET_ROOTFS_INITRAMFS=y
+CONFIG_TARGET_ROOTFS_INITRAMFS_SEPARATE=y
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_TARGET_ROOTFS_PARTSIZE=448
+CONFIG_ALL_KMODS=y
+CONFIG_TARGET_ROOTFS_DIR=""
+CONFIG_IB=y
+CONFIG_IB_STANDALONE=y
+CONFIG_PACKAGE_libip4tc=y
+CONFIG_PACKAGE_libip6tc=y
+CONFIG_PACKAGE_libiptext=y
+CONFIG_PACKAGE_libiptext6=y
+CONFIG_PACKAGE_libxtables=y
+CONFIG_PACKAGE_curl=y
+--- 内核镜像数（后缀随 KERNEL_SUFFIX 变；预期 > 0；target/linux/install 产出）---
+0
+--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---
+Image
+Image-initramfs
+base-files
+button-hotplug
+cryptodev-linux-cryptodev-linux-1.14
+dmx_usb_module-19.12.1
+dsa-rtl837x-2026-07-30-e306c165
+fast-classifier
+fullconenat-2023-01-01-74c5e6f3
+fullconenat-nft-2023-05-17-07d93b62
+gpio-button-hotplug
+image-mt7981a-glinet-gl-x3000.dtb
+image-mt7981a-glinet-gl-xe3000.dtb
+image-mt7981b-Airpi-emmc16G.dtb
+image-mt7981b-abt-asr3000-256m.dtb
+image-mt7981b-abt-asr3000-512m.dtb
+image-mt7981b-abt-asr3000-auto.dtb
+image-mt7981b-abt-asr3000.dtb
+image-mt7981b-aigo-s21.dtb
+image-mt7981b-bt-r320.dtb
+--- bin/packages 关键包（core 仓库那批）---
+curl_8.15.0-1_aarch64_cortex-a53.ipk
+--- filogic bootloader config 符号（mt7981 =y 行数 + jcg 样本）---
+20
+CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=y
+--- IB 内 FIP/bl2 清单 + jcg 精确判定（诊断 FIP 门禁的根因现场）---
+(未找到 IB tar.zst)
+--- Build 步 make 实际报错（2026-10-31 二次修：run55 尾部80行只有 perl 收尾+Error 2，
+    并行 make 下真凶在日志中部。改为：① 所有 make[?]*** 失败目标行 ② 首个失败目标
+    前后上下文 ③ 常见错误模式行 ④ 尾部100行）---
+build.log 行数 = 258331
+--- ① 全部 make 失败目标行（\*\*\*）---
+16407:make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+16414:make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+126637:make[3]: *** No rule to make target 'clean'.  Stop.
+203995:make[5]: *** [scripts/Makefile.build:229: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/nat46-2026-07-01-adb2f72e/nat46/modules/nat46-netdev.o] Error 1
+203996:make[4]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.12.114/Makefile:1982: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/nat46-2026-07-01-adb2f72e/nat46/modules] Error 2
+203997:make[3]: *** [Makefile:224: __sub-make] Error 2
+203999:make[2]: *** [Makefile:38: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/nat46-2026-07-01-adb2f72e/.built] Error 2
+204004:make[1]: *** [package/Makefile:171: package/kernel/nat46/compile] Error 1
+235340:make[3]: *** [Makefile:2029: u-boot] Error 139
+235341:make[3]: *** Deleting file 'u-boot'
+235343:make[2]: *** [Makefile:698: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/u-boot-mt7981_cmcc_rax3000me-emmc/u-boot-2025.10/.built] Error 2
+235348:make[1]: *** [package/Makefile:186: package/boot/uboot-mediatek/compile] Error 1
+237787:make[2]: *** [Makefile:84: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/bin/packages/aarch64_cortex-a53/base/libustream-openssl20201210_2026-03-01-99f1c0db-1_aarch64_cortex-a53.ipk] Error 1
+237803:make[1]: *** [package/Makefile:174: package/libs/ustream-ssl/compile] Error 1
+248244:make[8]: *** [scripts/Makefile.build:229: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/net/wireless/core.o] Error 1
+248245:make[7]: *** [scripts/Makefile.build:466: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/net/wireless] Error 2
+248246:make[7]: *** Waiting for unfinished jobs....
+251642:make[6]: *** [Makefile:1982: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39] Error 2
+251643:make[5]: *** [Makefile.build:13: modules] Error 2
+251644:make[4]: *** [Makefile.real:105: modules] Error 2
+251645:make[3]: *** [Makefile:121: modules] Error 2
+251647:make[2]: *** [Makefile:461: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/.built] Error 2
+251652:make[1]: *** [package/Makefile:171: package/kernel/mac80211/compile] Error 1
+257720:make[4]: *** [Makefile:36: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/image-mt7986a-supergateway-s20l.dtb] Error 1
+257725:make[4]: *** [Makefile:36: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/image-mt7986a-supergateway-s20p.dtb] Error 1
+257729:make[4]: *** [Makefile:36: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/image-mt7986a-supergateway-s20m.dtb] Error 1
+257746:make[3]: *** [Makefile:19: install] Error 2
+257748:make[2]: *** [Makefile:11: install] Error 2
+257752:make[1]: *** [target/Makefile:30: target/linux/install] Error 1
+--- ② 首个失败目标上下文（前 40 行 + 后 10 行）---
+. /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/include/shell.sh; /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libdeflate-gzip -dc /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/dl/dosfstools-4.2.tar.gz | tar -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2/.. -xf -
+[ ! -d ./src/ ] || cp -fpR ./src/* /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2
+
+Applying ./patches/100-source-date-epoch.patch using plaintext: 
+patching file src/boot.c
+patching file src/common.c
+patching file src/mkfs.fat.c
+
+Applying ./patches/101-config-switch-to-AC_CHECK_LIB.patch using plaintext: 
+patching file configure.ac
+touch /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2/.prepared56571b68d4449cd25f274f00b131ccfd_6664517399ebbbc92a37c5bb081b5c53
+(cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2; rm -f aclocal.m4; if [ -f ./configure.ac ] || [ -f ./configure.in ]; then [ -d ./autom4te.cache ] && rm -rf ./autom4te.cache; [ -e ./config.rpath ] || ln -s /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/scripts/config.rpath ./config.rpath; touch NEWS AUTHORS COPYING ABOUT-NLS ChangeLog; AUTOM4TE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autom4te AUTOCONF=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoconf AUTOMAKE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/automake ACLOCAL=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/aclocal AUTOHEADER=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoheader LIBTOOLIZE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtoolize LIBTOOL=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtool M4=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/m4 AUTOPOINT=true GTKDOCIZE=true LIBTOOLIZE='/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtoolize --install' /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoreconf -v -f -i -s -B /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/share/aclocal -I m4 -I . . || true; fi; );
+[ ! -d ./src/ ] || cp -fpR ./src/* /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4
+
+Applying ./patches/000-relocatable.patch using plaintext: 
+patching file libtoolize.in
+patching file m4/libtool.m4
+
+Applying ./patches/001-always-install-aux.patch using plaintext: 
+patching file libtoolize.in
+
+Applying ./patches/100-libdir-fixes.patch using plaintext: 
+patching file build-aux/ltmain.in
+
+Applying ./patches/110-dont-use-target-dir-for-relinking.patch using plaintext: 
+patching file build-aux/ltmain.in
+
+Applying ./patches/120-strip-unsafe-dirs-for-relinking.patch using plaintext: 
+patching file build-aux/ltmain.in
+
+Applying ./patches/140-don-t-quote-SHELL-in-Makefile.am.patch using plaintext: 
+patching file Makefile.am
+
+Applying ./patches/200-openwrt-branding.patch using plaintext: 
+patching file build-aux/ltmain.in
+patching file build-aux/funclib.sh
+CFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CPPFLAGS="-I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CXXFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " LDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib " make -j1 -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/. am__CONFIG_DISTCLEAN_FILES= CONFIG_STATUS_DEPENDENCIES= uninstall
+make[3]: Entering directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+There seems to be no Makefile in this directory.
+You must run ./configure before running 'make'.
+make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+make[3]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+make[2]: [Makefile:72: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/.preparedd8e9bf0925f497d4ebd608bf31136a72_6664517399ebbbc92a37c5bb081b5c53] Error 2 (ignored)
+CFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CPPFLAGS="-I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CXXFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " LDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib " make -j1 -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/. am__CONFIG_DISTCLEAN_FILES= CONFIG_STATUS_DEPENDENCIES= maintainer-clean # Clean bootstrap files from the release
+make[3]: Entering directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+There seems to be no Makefile in this directory.
+You must run ./configure before running 'make'.
+make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+make[3]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+make[2]: [Makefile:73: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/.preparedd8e9bf0925f497d4ebd608bf31136a72_6664517399ebbbc92a37c5bb081b5c53] Error 2 (ignored)
+(cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/share/aclocal/ && rm -f libtool.m4 ltdl.m4 lt~obsolete.m4 ltoptions.m4 ltsugar.m4 ltversion.m4)
+--- ③ 常见错误模式行（error/ERROR/undefined/No rule/missing）---
+3556:configure: WARNING: libattr development library was not found or not usable.
+7678:warning: A compatible version of re2c (>= 0.15.3) was not found; changes to src/*.in.cc will not affect your build.
+16424:error: pathspec 'gl-mod/bootstrap' did not match any file(s) known to git
+16426:error: pathspec 'gl-mod/bootstrap' did not match any file(s) known to git
+27790:checking for BSD- or MS-compatible name lister (nm)... ./configure: line 12440: 1q: command not found
+27797:./configure: line 12446: 1q: command not found
+27798:./configure: line 12440: 1q: command not found
+27799:./configure: line 12446: 1q: command not found
+27800:./configure: line 12440: 1q: command not found
+27801:./configure: line 12446: 1q: command not found
+41054:configure: WARNING: diffstat not found, some optional functionalities will be missing
+42204:-- Looking for environ - not found
+42423:checking for linux/major.h... -- Looking for connect in socket - not found
+42432:checking for netinet/in.h... -- Looking for OPENSSL_IS_AWSLC - not found
+42440:checking for sys/file.h... -- Looking for SSL_set0_wbio - not found
+42444:checking for sys/key.h... -- Looking for SSL_CTX_set_srp_username - not found
+42452:checking for sys/mount.h... -- Looking for include files sys/eventfd.h, sys/filio.h - not found
+42487:checking for struct stat.st_atim... -- Looking for 9 include files sys/eventfd.h, ..., sys/sockio.h - not found
+42505:-- Looking for 13 include files sys/eventfd.h, ..., sys/utime.h - not found
+42525:-- Looking for 18 include files sys/eventfd.h, ..., io.h - not found
+42596:checking for futimes... -- Looking for 29 include files sys/eventfd.h, ..., stropts.h - not found
+42693:checking for setresgid... -- Looking for stricmp - not found
+42697:checking for snprintf... -- Looking for strcmpi - not found
+42700:checking for srandom... -- Looking for memrchr - not found
+42707:checking for strdup... -- Looking for arc4random - not found
+42728:checking for magic_file in -lmagic... -- Looking for closesocket - not found
+42738:checking for optreset... -- Looking for getpass_r - not found
+42860:-- Looking for _fseeki64 - not found
+42921:-- Looking for setmode - not found
+42931:-- Looking for mach_absolute_time - not found
+43097:-- Looking for arc4random_buf - not found
+43106:-- Looking for sys/sysctl.h - not found
+43128:-- Looking for 3 include files sys/types.h, ..., copyfile.h - not found
+43130:-- Looking for 3 include files sys/types.h, ..., direct.h - not found
+43136:-- Looking for 5 include files sys/types.h, ..., ext2fs/ext2_fs.h - not found
+43190:checking whether the C compiler works... -- Looking for 15 include files sys/types.h, ..., membership.h - not found
+43198:checking for suffix of object files... -- Looking for 18 include files sys/types.h, ..., process.h - not found
+43209:-- Looking for 20 include files sys/types.h, ..., readpassphrase.h - not found
+43251:-- Looking for 27 include files sys/types.h, ..., sys/acl.h - not found
+43262:checking how to truncate binary pipes... -- Looking for 28 include files sys/types.h, ..., sys/extattr.h - not found
+43269:checking for stdlib.h... -- Looking for 29 include files sys/types.h, ..., sys/mkdev.h - not found
+43275:checking for inttypes.h... -- Looking for 29 include files sys/types.h, ..., sys/mount.h - not found
+43281:checking for strings.h... -- Looking for 31 include files sys/types.h, ..., sys/richacl.h - not found
+43339:-- Looking for 46 include files sys/types.h, ..., windows.h - not found
+43344:-- Looking for 46 include files sys/types.h, ..., wincrypt.h - not found
+43350:-- Looking for 46 include files sys/types.h, ..., winioctl.h - not found
+43552:checking if gmp_printf supports the ' group flag... -- Looking for getvfsbyname - not found
+43557:checking for __gmpn_invert_limb... -- Looking for lchflags - not found
+43617:-- Looking for readpassphrase - not found
+43634:-- Looking for strncpy_s - not found
+43698:-- Looking for _get_timezone - not found
+43700:-- Looking for ctime_s - not found
+43705:-- Looking for gmtime_s - not found
+43708:-- Looking for localtime_s - not found
+43714:-- Looking for _mkgmtime - not found
+43717:-- Looking for cygwin_conv_path - not found
+43842:-- Looking for EFTYPE - not found
+43850:-- Looking for D_MD_ORDER - not found
+43938:-- Checking support for ARCHIVE_CRYPTO_MD5_LIBC -- not found
+43943:-- Checking support for ARCHIVE_CRYPTO_RMD160_LIBC -- not found
+43946:-- Checking support for ARCHIVE_CRYPTO_SHA1_LIBC -- not found
+43952:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC -- not found
+43955:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC -- not found
+43960:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC -- not found
+43963:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC2 -- not found
+43969:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC2 -- not found
+43972:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC2 -- not found
+43977:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC3 -- not found
+43980:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC3 -- not found
+43985:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC3 -- not found
+43988:-- Checking support for ARCHIVE_CRYPTO_MD5_LIBSYSTEM -- not found
+43990:-- Checking support for ARCHIVE_CRYPTO_SHA1_LIBSYSTEM -- not found
+43993:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBSYSTEM -- not found
+43998:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBSYSTEM -- not found
+44001:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBSYSTEM -- not found
+65471:checking what otool to use... not found
+87917:checking what otool to use... not found
+89485:cc1: error: no include path in which to search for stdc-predef.h
+107160:curl: (22) The requested URL returned error: 404
+107245:curl: (22) The requested URL returned error: 404
+107282:-- Looking for xlocale.h - not found
+107284:-- Looking for _isnan - not found
+107286:-- Looking for _finite - not found
+107313:-- Looking for _doprnt - not found
+107323:-- Looking for arc4random - not found
+112284:<sys/sockio.h> not found, assuming socket ioctls are in <sys/ioctl.h>.
+113367:curl: (22) The requested URL returned error: 404
+113376:curl: (22) The requested URL returned error: 404
+113382:curl: (22) The requested URL returned error: 404
+113388:curl: (22) The requested URL returned error: 404
+113394:curl: (22) The requested URL returned error: 404
+113454:-- Looking for arc4random_buf - not found
+113456:-- Looking for arc4random - not found
+113460:-- Looking for off_t - not found
+113462:-- Looking for size_t - not found
+114262:-- Looking for include file sys/endian.h - not found
+114388:-- Looking for backtrace - not found
+114414:-- Looking for GetNumberFormat - not found
+114586:-- Looking for pthread_attr_get_np in pthread - not found
+114621:-- Looking for include files pthread.h, pthread_np.h - not found
+116635:-- Looking for bitypes.h - not found
+116638:-- Looking for sys/ioccom.h - not found
+116640:-- Looking for sys/sockio.h - not found
+116747:-- Looking for putmsg - not found
+116751:-- Looking for putmsg in str - not found
+116762:-- Looking for getnetbyname_r - not found
+116769:-- Looking for getprotobyname_r - not found
+116905:-- Looking for ether_hostton - not found
+116945:-- Looking for include files sys/types.h, net/bpf.h - not found
+116951:-- Looking for net/pfilt.h - not found
+116956:-- Looking for net/enet.h - not found
+116962:-- Looking for net/nit.h - not found
+116969:-- Looking for sys/net/nit.h - not found
+116977:-- Looking for net/raw.h - not found
+116987:-- Looking for sys/dlpi.h - not found
+116999:-- Looking for config/HaikuConfig.h - not found
+117846:-- Looking for strtoq - not found
+117852:-- Looking for _strtoi64 - not found
+118062:bash: line 1: echo: write error: Broken pipe
+118597:configure: WARNING: Doxygen not found - continuing without Doxygen support
+119951:configure: WARNING: "Swig not found - python bindings will not be made"
+123730:curl: (22) The requested URL returned error: 404
+126637:make[3]: *** No rule to make target 'clean'.  Stop.
+128665:cc1: error: unknown value 'native' for '-march'
+129276:checking for XML catalog (/etc/xml/catalog)... not found
+129278:checking for DocBook XML DTD V4.4 in XML catalog... not found
+129279:checking for DocBook XSL Stylesheets in XML catalog... not found
+145970:-- Looking for sys/cdefs.h - not found
+146010:-- Looking for xlocale.h - not found
+146012:-- Looking for _isnan - not found
+146016:-- Looking for _finite - not found
+146034:-- Looking for _doprnt - not found
+146109:-- Looking for arc4random - not found
+146721:  100 |         fprintf(stderr,"internal error: len %d %% %d\n",req.length,
+147489:bash: line 1: echo: write error: Broken pipe
+149895:curl: (22) The requested URL returned error: 404
+149997:curl: (22) The requested URL returned error: 404
+150151:-- Looking for windows.h - not found
+150174:-- Looking for memfd_create - not found
+150193:-- Looking for secure_getenv - not found
+152396:-- Looking for windows.h - not found
+152458:-- Looking for GetTickCount64 - not found
+152603:--   Package 'libsystemd' not found
+152605:--   Package 'libsystemd-login' not found
+152606:--   Package 'libsystemd-daemon' not found
+152607:--   Package 'libsystemd-journal' not found
+152609:--   Package 'systemd' not found
+152628:-- Looking for crt/externs.h - not found
+152634:-- Looking for execinfo.h - not found
+152645:-- Looking for io.h - not found
+152668:-- Looking for 3 include files stdint.h, ..., sys/event.h - not found
+152692:-- Looking for sys/syslimits.h - not found
+152703:-- Looking for ws2tcpip.h - not found
+152747:-- Looking for backtrace - not found
+152757:-- Looking for getpeerucred - not found
+154304:checking for fdatasync... Checking for isnan...not found
+154308:checking for epoll_create1... Checking for localtime_s...not found
+154319:checking for ctermid_r... Checking for pread64...not found
+154323:checking for flock... Checking for pwrite64...not found
+164001:The necessary bits to build these optional modules were not found:
+165773:  because gtk-doc >= 1.14 is not found.
+169768:cat: write error: Broken pipe
+171054:bash: line 1: echo: write error: Broken pipe
+174356:The necessary bits to build these optional modules were not found:
+174457:The necessary bits to build these optional modules were not found:
+175648:The necessary bits to build these optional modules were not found:
+192362:bash: line 1: echo: write error: Broken pipe
+194199:configure: WARNING: GNU basename extension not found
+203992:/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/nat46-2026-07-01-adb2f72e/nat46/modules/nat46-netdev.c:124:12: error: 'struct net_device' has no member named 'netns_local'
+204003:    ERROR: package/kernel/nat46 failed to build.
+235338:/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/u-boot-mt7981_cmcc_rax3000me-emmc/u-boot-2025.10/common/board_r.c:678:(.text.board_init_r+0xe8): undefined reference to `board_init'
+235347:    ERROR: package/boot/uboot-mediatek failed to build (build variant: mt7981_cmcc_rax3000me-emmc).
+236470:-- Looking for explicit_memset - not found
+236473:-- Looking for memset_s - not found
+237783:checking for inet_aton... Package libustream-openssl is missing dependencies for the following libraries:
+237802:    ERROR: package/libs/ustream-ssl failed to build (build variant: openssl).
+238575:configure: WARNING: libgsasl was not found
+239166:  GSASL:            no      (libgsasl not found)
+240305:configure.ac:940: warning: macro 'AM_PATH_GPGME' not found in library
+248228:/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/net/wireless/core.c:168:29: error: 'struct net_device' has no member named 'netns_local'
+248231:/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/net/wireless/core.c:176:29: error: 'struct net_device' has no member named 'netns_local'
+248234:/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/net/wireless/core.c:192:37: error: 'struct net_device' has no member named 'netns_local'
+248237:/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/net/wireless/core.c:200:37: error: 'struct net_device' has no member named 'netns_local'
+248241:/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.18.39/net/wireless/core.c:1556:20: error: 'struct net_device' has no member named 'netns_local'
+249502:./Programs/python.c:16:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Programs/python.gcda' profile count data file not found [-Wmissing-profile]
+249508:Parser/token.c:244:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/token.gcda' profile count data file not found [-Wmissing-profile]
+249514:Parser/pegen.c:1013:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/pegen.gcda' profile count data file not found [-Wmissing-profile]
+249521:Parser/pegen_errors.c:460:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/pegen_errors.gcda' profile count data file not found [-Wmissing-profile]
+249529:Parser/action_helpers.c:1289:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/action_helpers.gcda' profile count data file not found [-Wmissing-profile]
+249538:Parser/parser.c:39266:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/parser.gcda' profile count data file not found [-Wmissing-profile]
+249556:Parser/string_parser.c:1273:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/string_parser.gcda' profile count data file not found [-Wmissing-profile]
+249563:Parser/peg_api.c:28:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/peg_api.gcda' profile count data file not found [-Wmissing-profile]
+249570:Parser/myreadline.c:414:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/myreadline.gcda' profile count data file not found [-Wmissing-profile]
+249577:Parser/tokenizer.c:2236:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Parser/tokenizer.gcda' profile count data file not found [-Wmissing-profile]
+249586:Objects/abstract.c:2976:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/abstract.gcda' profile count data file not found [-Wmissing-profile]
+249593:Objects/accu.c:115:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/accu.gcda' profile count data file not found [-Wmissing-profile]
+249599:Objects/boolobject.c:206:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/boolobject.gcda' profile count data file not found [-Wmissing-profile]
+249607:Objects/bytes_methods.c:833:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/bytes_methods.gcda' profile count data file not found [-Wmissing-profile]
+249613:Objects/bytearrayobject.c:2491:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/bytearrayobject.gcda' profile count data file not found [-Wmissing-profile]
+249622:Objects/bytesobject.c:3626:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/bytesobject.gcda' profile count data file not found [-Wmissing-profile]
+249634:Objects/call.c:1040:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/call.gcda' profile count data file not found [-Wmissing-profile]
+249640:Objects/capsule.c:318:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/capsule.gcda' profile count data file not found [-Wmissing-profile]
+249647:Objects/cellobject.c:197:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/cellobject.gcda' profile count data file not found [-Wmissing-profile]
+249654:Objects/classobject.c:545:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/classobject.gcda' profile count data file not found [-Wmissing-profile]
+249660:Objects/codeobject.c:2238:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/codeobject.gcda' profile count data file not found [-Wmissing-profile]
+249670:Objects/complexobject.c:1115:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/complexobject.gcda' profile count data file not found [-Wmissing-profile]
+249676:Objects/descrobject.c:1963:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/descrobject.gcda' profile count data file not found [-Wmissing-profile]
+249683:Objects/enumobject.c:545:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/enumobject.gcda' profile count data file not found [-Wmissing-profile]
+249690:Objects/exceptions.c:3879:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/exceptions.gcda' profile count data file not found [-Wmissing-profile]
+249698:Objects/genericaliasobject.c:974:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/genericaliasobject.gcda' profile count data file not found [-Wmissing-profile]
+249704:Objects/genobject.c:2326:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/genobject.gcda' profile count data file not found [-Wmissing-profile]
+249712:Objects/fileobject.c:535:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/fileobject.gcda' profile count data file not found [-Wmissing-profile]
+249719:Objects/floatobject.c:2652:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/floatobject.gcda' profile count data file not found [-Wmissing-profile]
+249726:Objects/frameobject.c:1406:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/frameobject.gcda' profile count data file not found [-Wmissing-profile]
+249734:Objects/funcobject.c:1232:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/funcobject.gcda' profile count data file not found [-Wmissing-profile]
+249740:Objects/interpreteridobject.c:294:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/interpreteridobject.gcda' profile count data file not found [-Wmissing-profile]
+249748:Objects/iterobject.c:510:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/iterobject.gcda' profile count data file not found [-Wmissing-profile]
+249754:Objects/listobject.c:3485:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/listobject.gcda' profile count data file not found [-Wmissing-profile]
+249765:Objects/longobject.c:6199:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/longobject.gcda' profile count data file not found [-Wmissing-profile]
+249776:Objects/dictobject.c:5696:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/dictobject.gcda' profile count data file not found [-Wmissing-profile]
+249784:Objects/odictobject.c:2293:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/odictobject.gcda' profile count data file not found [-Wmissing-profile]
+249792:Objects/memoryobject.c:3319:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/memoryobject.gcda' profile count data file not found [-Wmissing-profile]
+249800:Objects/methodobject.c:556:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/methodobject.gcda' profile count data file not found [-Wmissing-profile]
+249807:Objects/moduleobject.c:988:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/moduleobject.gcda' profile count data file not found [-Wmissing-profile]
+249814:Objects/namespaceobject.c:262:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/namespaceobject.gcda' profile count data file not found [-Wmissing-profile]
+249822:Objects/object.c:2465:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/object.gcda' profile count data file not found [-Wmissing-profile]
+249828:Objects/obmalloc.c:3115:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/obmalloc.gcda' profile count data file not found [-Wmissing-profile]
+249837:Objects/picklebufobject.c:219:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/picklebufobject.gcda' profile count data file not found [-Wmissing-profile]
+249843:Objects/rangeobject.c:1245:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/rangeobject.gcda' profile count data file not found [-Wmissing-profile]
+249849:Objects/setobject.c:2569:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/setobject.gcda' profile count data file not found [-Wmissing-profile]
+249855:Objects/sliceobject.c:671:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/sliceobject.gcda' profile count data file not found [-Wmissing-profile]
+249862:Objects/structseq.c:619:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/structseq.gcda' profile count data file not found [-Wmissing-profile]
+249869:Objects/tupleobject.c:1272:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/tupleobject.gcda' profile count data file not found [-Wmissing-profile]
+249877:Objects/typeobject.c:9213:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/typeobject.gcda' profile count data file not found [-Wmissing-profile]
+249890:Objects/unicodeobject.c:16227:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/unicodeobject.gcda' profile count data file not found [-Wmissing-profile]
+249910:Objects/unicodectype.c:294:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/unicodectype.gcda' profile count data file not found [-Wmissing-profile]
+249918:Objects/unionobject.c:408:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/unionobject.gcda' profile count data file not found [-Wmissing-profile]
+249924:Objects/weakrefobject.c:1018:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Objects/weakrefobject.gcda' profile count data file not found [-Wmissing-profile]
+249932:Python/_warnings.c:1419:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/_warnings.gcda' profile count data file not found [-Wmissing-profile]
+249942:Python/Python-ast.c:12471:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/Python-ast.gcda' profile count data file not found [-Wmissing-profile]
+249959:Python/Python-tokenize.c:194:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/Python-tokenize.gcda' profile count data file not found [-Wmissing-profile]
+249965:Python/asdl.c:6:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/asdl.gcda' profile count data file not found [-Wmissing-profile]
+249972:Python/ast.c:1064:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/ast.gcda' profile count data file not found [-Wmissing-profile]
+249980:Python/ast_opt.c:1110:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/ast_opt.gcda' profile count data file not found [-Wmissing-profile]
+249988:Python/ast_unparse.c:946:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/ast_unparse.gcda' profile count data file not found [-Wmissing-profile]
+249995:Python/bltinmodule.c:3120:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/bltinmodule.gcda' profile count data file not found [-Wmissing-profile]
+250004:Python/ceval.c:7951:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/ceval.gcda' profile count data file not found [-Wmissing-profile]
+250020:Python/codecs.c:1536:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/codecs.gcda' profile count data file not found [-Wmissing-profile]
+250030:Python/compile.c:9457:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/compile.gcda' profile count data file not found [-Wmissing-profile]
+250043:Python/context.c:1344:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/context.gcda' profile count data file not found [-Wmissing-profile]
+250054:Python/errors.c:1860:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/errors.gcda' profile count data file not found [-Wmissing-profile]
+250061:Python/frame.c:170:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/frame.gcda' profile count data file not found [-Wmissing-profile]
+250067:Python/frozenmain.c:85:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/frozenmain.gcda' profile count data file not found [-Wmissing-profile]
+250074:Python/future.c:136:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/future.gcda' profile count data file not found [-Wmissing-profile]
+250080:Python/getargs.c:2938:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/getargs.gcda' profile count data file not found [-Wmissing-profile]
+250089:Python/getcompiler.c:27:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/getcompiler.gcda' profile count data file not found [-Wmissing-profile]
+250095:Python/getcopyright.c:23:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/getcopyright.gcda' profile count data file not found [-Wmissing-profile]
+250101:./Python/getplatform.c:12:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/getplatform.gcda' profile count data file not found [-Wmissing-profile]
+250107:Python/getversion.c:18:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/getversion.gcda' profile count data file not found [-Wmissing-profile]
+250113:Python/hamt.c:2969:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/hamt.gcda' profile count data file not found [-Wmissing-profile]
+250121:Python/hashtable.c:417:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/hashtable.gcda' profile count data file not found [-Wmissing-profile]
+250127:Python/import.c:2677:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/import.gcda' profile count data file not found [-Wmissing-profile]
+250134:./Python/importdl.c:248:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/importdl.gcda' profile count data file not found [-Wmissing-profile]
+250148:Python/initconfig.c:3111:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/initconfig.gcda' profile count data file not found [-Wmissing-profile]
+250157:Python/marshal.c:1912:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/marshal.gcda' profile count data file not found [-Wmissing-profile]
+250163:Python/modsupport.c:705:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/modsupport.gcda' profile count data file not found [-Wmissing-profile]
+250169:Python/mysnprintf.c:80:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/mysnprintf.gcda' profile count data file not found [-Wmissing-profile]
+250175:Python/mystrtoul.c:291:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/mystrtoul.gcda' profile count data file not found [-Wmissing-profile]
+250184:Python/pathconfig.c:519:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pathconfig.gcda' profile count data file not found [-Wmissing-profile]
+250190:Python/preconfig.c:973:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/preconfig.gcda' profile count data file not found [-Wmissing-profile]
+250197:Python/pyarena.c:211:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pyarena.gcda' profile count data file not found [-Wmissing-profile]
+250205:Python/pyfpe.c:18:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pyfpe.gcda' profile count data file not found [-Wmissing-profile]
+250211:Python/pyhash.c:481:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pyhash.gcda' profile count data file not found [-Wmissing-profile]
+250217:Python/pylifecycle.c:3049:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pylifecycle.gcda' profile count data file not found [-Wmissing-profile]
+250237:Python/pystate.c:2299:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pystate.gcda' profile count data file not found [-Wmissing-profile]
+250245:Python/pythonrun.c:2035:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pythonrun.gcda' profile count data file not found [-Wmissing-profile]
+250253:Python/pytime.c:1374:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pytime.gcda' profile count data file not found [-Wmissing-profile]
+250259:Python/bootstrap_hash.c:593:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/bootstrap_hash.gcda' profile count data file not found [-Wmissing-profile]
+250265:Python/specialize.c:2057:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/specialize.gcda' profile count data file not found [-Wmissing-profile]
+250274:Python/structmember.c:332:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/structmember.gcda' profile count data file not found [-Wmissing-profile]
+250280:Python/symtable.c:2199:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/symtable.gcda' profile count data file not found [-Wmissing-profile]
+250291:./Python/sysmodule.c:3547:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/sysmodule.gcda' profile count data file not found [-Wmissing-profile]
+250299:Python/thread.c:263:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/thread.gcda' profile count data file not found [-Wmissing-profile]
+250305:Python/traceback.c:1453:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/traceback.gcda' profile count data file not found [-Wmissing-profile]
+250313:Python/getopt.c:174:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/getopt.gcda' profile count data file not found [-Wmissing-profile]
+250319:Python/pystrcmp.c:30:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pystrcmp.gcda' profile count data file not found [-Wmissing-profile]
+250325:Python/pystrtod.c:1323:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pystrtod.gcda' profile count data file not found [-Wmissing-profile]
+250331:Python/pystrhex.c:174:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/pystrhex.gcda' profile count data file not found [-Wmissing-profile]
+250337:Python/dtoa.c:2855:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/dtoa.gcda' profile count data file not found [-Wmissing-profile]
+250346:Python/formatter_unicode.c:1623:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/formatter_unicode.gcda' profile count data file not found [-Wmissing-profile]
+250353:Python/fileutils.c:2681:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/fileutils.gcda' profile count data file not found [-Wmissing-profile]
+250360:Python/suggestions.c:297:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/suggestions.gcda' profile count data file not found [-Wmissing-profile]
+250368:./Python/dynload_shlib.c:111:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Python/dynload_shlib.gcda' profile count data file not found [-Wmissing-profile]
+250376:Modules/main.c:739:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Modules/main.gcda' profile count data file not found [-Wmissing-profile]
+250383:Modules/gcmodule.c:2386:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Modules/gcmodule.gcda' profile count data file not found [-Wmissing-profile]
+250390:./Modules/atexitmodule.c:290:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Modules/atexitmodule.gcda' profile count data file not found [-Wmissing-profile]
+250396:./Modules/faulthandler.c:1447:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Modules/faulthandler.gcda' profile count data file not found [-Wmissing-profile]
+250406:./Modules/posixmodule.c:16134:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Modules/posixmodule.gcda' profile count data file not found [-Wmissing-profile]
+250423:./Modules/signalmodule.c:2082:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Modules/signalmodule.gcda' profile count data file not found [-Wmissing-profile]
+250430:./Modules/_tracemalloc.c:1825:1: warning: '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/Python-3.11.13/Modules/_tracemalloc.gcda' profile count data file not found [-Wmissing-profile]
+grep: write error: Broken pipe
+--- ④ 末尾 100 行 ---
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.motorola-bin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.uimage_sgehdr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.ext3.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfwimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.dc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.sign_dlink_ru.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.trx2edips.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lzma.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.nand_ecc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cfdisk.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.m4.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkwrggimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.xz.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.nec-enc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.wrt400n.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfs.fat.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.add_header.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.b43-fwcutter.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.pfunct.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.fat.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfs.ext4.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2fsck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zycast.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.avm-wasp-checksum.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.unsquashfs4.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ocspcheck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkh3cvfs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.srec2bin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkcsysimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkbrnimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkqdimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cpack.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.trx2usr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.linksys-addfwhdr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkplanexfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mklibs-readelf.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.flock.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.encode_crc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdapimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zyimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.flex.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bcm4908asus.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lzmainfo.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.sfdisk.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fix-u-media-header.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lsattr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkporayfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fdisk.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.xargs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.dgn3500sum.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.sed.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bcmblob.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfs.ext3.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.asusuimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ptgen.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cmake.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkrasimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkchkimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e4defrag.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bison.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.addpattern.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.usign.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkmerakifw-old.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdhpimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2image.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.badblocks.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.make_ext4fs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkheader_gemtek.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfwimage2.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mklost+found.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.tune2fs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.imagetag.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.seama.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.xmlwf.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zytrx.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mktplinkfw2.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.faked.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkedimaximg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.tar.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.patch.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.makeamitbin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.spw303v.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.find.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.logsave.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.jshn.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.codiff.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.libdeflate-gzip.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ctracer.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.dns313-header.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lxlfw.bin: executable
+(cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl; \
+	tar -I '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/xz -7e -T0' -cf /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/bin/targets/mediatek/filogic/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64.tar.xz openwrt-imagebuilder-mediatek-filogic.Linux-x86_64 \
+	--mtime="Sat Oct 31 08:12:01 UTC 2026"; \
+)
+make[2]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/target/imagebuilder'
+time: target/imagebuilder/compile#380.70#8.97#115.77
+make[1]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt'
