@@ -1,0 +1,662 @@
+run=41243534496 attempt=1 target=mediatek/filogic
+job_status=failure
+--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，
+    而非编译失败。常见三因：① 超 timeout-minutes(330m) ② 6h runner 硬上限
+    ③ concurrency cancel-in-progress（同一分支新推送抢跑）
+    ④ GitHub Free 私有仓月度配额(2000min)耗尽 → job 排队未启动（日志会是空的）
+--- .config 关键项 ---
+CONFIG_TARGET_ROOTFS_INITRAMFS=y
+CONFIG_TARGET_ROOTFS_INITRAMFS_SEPARATE=y
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_TARGET_ROOTFS_PARTSIZE=448
+CONFIG_ALL_KMODS=y
+CONFIG_TARGET_ROOTFS_DIR=""
+CONFIG_IB=y
+CONFIG_IB_STANDALONE=y
+CONFIG_PACKAGE_libip4tc=y
+CONFIG_PACKAGE_libip6tc=y
+CONFIG_PACKAGE_libiptext=y
+CONFIG_PACKAGE_libiptext6=y
+CONFIG_PACKAGE_libxtables=y
+CONFIG_PACKAGE_curl=y
+--- 内核镜像数（后缀随 KERNEL_SUFFIX 变；预期 > 0；target/linux/install 产出）---
+0
+--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---
+Image
+Image-initramfs
+dsa-rtl837x-2026-07-30-e306c165
+gpio-button-hotplug
+image-mt7981a-glinet-gl-x3000.dtb
+image-mt7981a-glinet-gl-xe3000.dtb
+image-mt7981b-Airpi-emmc16G.dtb
+image-mt7981b-abt-asr3000-256m.dtb
+image-mt7981b-abt-asr3000-512m.dtb
+image-mt7981b-abt-asr3000-auto.dtb
+image-mt7981b-abt-asr3000.dtb
+image-mt7981b-aigo-s21.dtb
+image-mt7981b-bt-r320.dtb
+image-mt7981b-bt-rb300-256m.dtb
+image-mt7981b-bt-rb300-512m.dtb
+image-mt7981b-bt-rb300-auto.dtb
+image-mt7981b-bt-rb300.dtb
+image-mt7981b-cetron-ct3003-256m.dtb
+image-mt7981b-cetron-ct3003-512m.dtb
+image-mt7981b-cetron-ct3003-auto.dtb
+--- bin/packages 关键包（core 仓库那批）---
+--- filogic bootloader config 符号（mt7981 =y 行数 + jcg 样本）---
+17
+CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=y
+--- IB 内 FIP/bl2 清单 + jcg 精确判定（诊断 FIP 门禁的根因现场）---
+(未找到 IB tar.zst)
+--- Build 步 make 实际报错（2026-10-31 二次修：run55 尾部80行只有 perl 收尾+Error 2，
+    并行 make 下真凶在日志中部。改为：① 所有 make[?]*** 失败目标行 ② 首个失败目标
+    前后上下文 ③ 常见错误模式行 ④ 尾部100行）---
+build.log 行数 = 251393
+--- ① 全部 make 失败目标行（\*\*\*）---
+16394:make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+16404:make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+109209:checking for openpty header...   0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0make[6]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/Makefile.build:287: rkp-ipid.o] Error 1
+109210:make[5]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/Makefile:2050: .] Error 2
+109211:make[4]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/Makefile:248: __sub-make] Error 2
+109213:make[3]: *** [Makefile:248: __sub-make] Error 2
+109215:make[2]: *** [Makefile:37: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/rkp-ipid/.built] Error 2
+109220:make[1]: *** [package/Makefile:171: package/feeds/kiddin9/rkp-ipid/compile] Error 1
+113225:make[6]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/Makefile.build:287: devices/mhi_netdev_quectel.o] Error 1
+113226:make[5]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/Makefile:2050: .] Error 2
+113227:make[4]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/Makefile:248: __sub-make] Error 2
+113229:make[3]: *** [Makefile:248: __sub-make] Error 2
+113231:make[2]: *** [Makefile:49: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/pcie_mhi-1.3.8/.built] Error 2
+113236:make[1]: *** [package/Makefile:171: package/wwan/driver/quectel_MHI/compile] Error 1
+124495:make[3]: *** No rule to make target 'clean'.  Stop.
+150773:make[6]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/Makefile.build:287: pf_ring.o] Error 1
+150774:make[5]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/Makefile:2050: .] Error 2
+150775:make[4]: *** [/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/Makefile:248: __sub-make] Error 2
+150777:make[3]: *** [Makefile:248: __sub-make] Error 2
+150779:make[2]: *** [Makefile:92: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/libpfring-9.2.0/.built] Error 2
+150784:make[1]: *** [package/Makefile:171: package/feeds/packages/libpfring/compile] Error 1
+173186:make[2]: *** [modules/fs.mk:534: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/bin/targets/mediatek/filogic/packages/kmod-fs-nfs-common-rpcsec_6.18.58-1_aarch64_cortex-a53.ipk] Error 1
+173219:make[2]: *** [modules/fs.mk:612: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/bin/targets/mediatek/filogic/packages/kmod-fs-ntfs_6.18.58-1_aarch64_cortex-a53.ipk] Error 1
+181724:make[2]: *** [modules/fs.mk:594: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/pkginfo/kmod-fs-nfsd.provides] Error 1
+181740:make[2]: *** [modules/fs.mk:612: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/pkginfo/kmod-fs-ntfs.provides] Error 1
+181749:make[2]: *** [modules/fs.mk:612: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/packages/.pkgdir/kmod-fs-ntfs.installed] Error 1
+192722:make[1]: *** [package/Makefile:171: package/kernel/linux/compile] Error 1
+246129:make[1]: *** [package/Makefile:100: package/install] Error 255
+250814:make[4]: *** [Makefile:36: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/image-mt7986a-supergateway-s20l.dtb] Error 1
+250833:make[4]: *** [Makefile:36: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/image-mt7986a-supergateway-s20m.dtb] Error 1
+250838:make[4]: *** [Makefile:36: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/image-mt7986a-supergateway-s20p.dtb] Error 1
+250848:make[3]: *** [Makefile:19: install] Error 2
+250850:make[2]: *** [Makefile:11: install] Error 2
+250854:make[1]: *** [target/Makefile:30: target/linux/install] Error 1
+--- ② 首个失败目标上下文（前 40 行 + 后 10 行）---
+grep: write error: Broken pipe
+patching file src/boot.c
+patching file src/common.c
+patching file src/mkfs.fat.c
+
+Applying ./patches/101-config-switch-to-AC_CHECK_LIB.patch using plaintext: 
+config.status: creating Makefile
+patching file configure.ac
+touch /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2/.prepared906dd8be35489e301f7954a6a530eeff_6664517399ebbbc92a37c5bb081b5c53
+(cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2; rm -f aclocal.m4; if [ -f ./configure.ac ] || [ -f ./configure.in ]; then [ -d ./autom4te.cache ] && rm -rf ./autom4te.cache; [ -e ./config.rpath ] || ln -s /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/scripts/config.rpath ./config.rpath; touch NEWS AUTHORS COPYING ABOUT-NLS ChangeLog; AUTOM4TE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autom4te AUTOCONF=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoconf AUTOMAKE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/automake ACLOCAL=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/aclocal AUTOHEADER=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoheader LIBTOOLIZE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtoolize LIBTOOL=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtool M4=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/m4 AUTOPOINT=true GTKDOCIZE=true LIBTOOLIZE='/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtoolize --install' /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoreconf -v -f -i -s -B /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/share/aclocal -I m4 -I . . || true; fi; );
+config.status: creating include/Makefile
+[ ! -d ./src/ ] || cp -fpR ./src/* /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4
+
+Applying ./patches/000-relocatable.patch using plaintext: 
+patching file libtoolize.in
+patching file m4/libtool.m4
+
+Applying ./patches/001-always-install-aux.patch using plaintext: 
+patching file libtoolize.in
+
+Applying ./patches/100-libdir-fixes.patch using plaintext: 
+patching file build-aux/ltmain.in
+
+Applying ./patches/110-dont-use-target-dir-for-relinking.patch using plaintext: 
+patching file build-aux/ltmain.in
+config.status: creating include/openssl/Makefile
+
+Applying ./patches/120-strip-unsafe-dirs-for-relinking.patch using plaintext: 
+patching file build-aux/ltmain.in
+
+Applying ./patches/140-don-t-quote-SHELL-in-Makefile.am.patch using plaintext: 
+patching file Makefile.am
+
+Applying ./patches/200-openwrt-branding.patch using plaintext: 
+patching file build-aux/ltmain.in
+patching file build-aux/funclib.sh
+CFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CPPFLAGS="-I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CXXFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " LDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib " make -j1 -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/. am__CONFIG_DISTCLEAN_FILES= CONFIG_STATUS_DEPENDENCIES= uninstall
+make[3]: Entering directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+config.status: creating crypto/Makefile
+There seems to be no Makefile in this directory.
+You must run ./configure before running 'make'.
+make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+make[3]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+make[2]: [Makefile:72: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/.prepared2b21893bce2f0cde5bfc826df3c61b9c_6664517399ebbbc92a37c5bb081b5c53] Error 2 (ignored)
+CFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CPPFLAGS="-I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " CXXFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include " LDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib " make -j1 -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/. am__CONFIG_DISTCLEAN_FILES= CONFIG_STATUS_DEPENDENCIES= maintainer-clean # Clean bootstrap files from the release
+make[3]: Entering directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+autoreconf: export WARNINGS=
+autoreconf: Entering directory '.'
+autoreconf: configure.ac: not using Gettext
+There seems to be no Makefile in this directory.
+You must run ./configure before running 'make'.
+make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+--- ③ 常见错误模式行（error/ERROR/Error/undefined/No rule/missing/DTC）---
+3556:configure: WARNING: libattr development library was not found or not usable.
+7621:warning: A compatible version of re2c (>= 0.15.3) was not found; changes to src/*.in.cc will not affect your build.
+16424:error: pathspec 'gl-mod/bootstrap' did not match any file(s) known to git
+16426:error: pathspec 'gl-mod/bootstrap' did not match any file(s) known to git
+27632:checking for BSD- or MS-compatible name lister (nm)... ./configure: line 12440: 1q: command not found
+27633:./configure: line 12446: 1q: command not found
+27640:./configure: line 12440: 1q: command not found
+27641:./configure: line 12446: 1q: command not found
+27642:./configure: line 12440: 1q: command not found
+27643:./configure: line 12446: 1q: command not found
+35597:checking for math.h... -- Looking for environ - not found
+35743:checking for strtoumax... checking whether the C compiler works... -- Looking for connect in socket - not found
+35758:checking whether /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/gcc accepts -g... -- Looking for OPENSSL_IS_AWSLC - not found
+35771:checking for pthread_sigmask... -- Looking for SSL_set0_wbio - not found
+35779:checking for stdint.h... -- Looking for SSL_CTX_set_srp_username - not found
+35791:checking for sleep... -- Looking for include files sys/eventfd.h, sys/filio.h - not found
+35832:checking for library containing yywrap... -- Looking for 9 include files sys/eventfd.h, ..., sys/sockio.h - not found
+35861:checking for an ANSI C-conforming const... -- Looking for 13 include files sys/eventfd.h, ..., sys/utime.h - not found
+35900:checking whether error_at_line is declared... -- Looking for 18 include files sys/eventfd.h, ..., io.h - not found
+35960:-- Looking for 29 include files sys/eventfd.h, ..., stropts.h - not found
+36074:checking whether getline is declared... -- Looking for stricmp - not found
+36079:checking whether getopt is POSIX compatible... -- Looking for strcmpi - not found
+36083:-- Looking for memrchr - not found
+36092:-- Looking for arc4random - not found
+36165:checking whether limits.h has SSIZE_MAX... -- Looking for closesocket - not found
+36173:checking whether stdint.h conforms to C99... -- Looking for getpass_r - not found
+36263:-- Looking for _fseeki64 - not found
+36290:-- Looking for setmode - not found
+36295:checking for struct tm.tm_zone... -- Looking for mach_absolute_time - not found
+36462:checking for sigset_t... -- Looking for arc4random_buf - not found
+36492:-- Looking for sys/sysctl.h - not found
+36515:checking whether btowc is consistent with mbrtowc in the C locale... -- Looking for 3 include files sys/types.h, ..., copyfile.h - not found
+36518:-- Looking for 3 include files sys/types.h, ..., direct.h - not found
+36527:checking whether calloc (0, n) and calloc (n, 0) return nonnull... -- Looking for 5 include files sys/types.h, ..., ext2fs/ext2_fs.h - not found
+36564:checking for euidaccess... -- Looking for 15 include files sys/types.h, ..., membership.h - not found
+36571:checking whether fcntl understands F_DUPFD_CLOEXEC... -- Looking for 18 include files sys/types.h, ..., process.h - not found
+36579:checking for struct stat.st_blocks... -- Looking for 20 include files sys/types.h, ..., readpassphrase.h - not found
+36597:checking whether __fpending is declared... -- Looking for 27 include files sys/types.h, ..., sys/acl.h - not found
+36604:checking for __freadahead... -- Looking for 28 include files sys/types.h, ..., sys/extattr.h - not found
+36609:checking whether free is known to preserve errno... -- Looking for 29 include files sys/types.h, ..., sys/mkdev.h - not found
+36614:checking for _fseeki64... -- Looking for 29 include files sys/types.h, ..., sys/mount.h - not found
+36618:-- Looking for 31 include files sys/types.h, ..., sys/richacl.h - not found
+36655:checking for working getgroups... -- Looking for 46 include files sys/types.h, ..., windows.h - not found
+36661:-- Looking for 46 include files sys/types.h, ..., wincrypt.h - not found
+36664:checking for gethostname... -- Looking for 46 include files sys/types.h, ..., winioctl.h - not found
+36820:-- Looking for getvfsbyname - not found
+36828:checking whether perror matches strerror... -- Looking for lchflags - not found
+36937:checking whether localtime_r is declared... -- Looking for readpassphrase - not found
+36960:checking whether unsetenv obeys POSIX... -- Looking for strncpy_s - not found
+37067:checking for unistd.h... -- Looking for _get_timezone - not found
+37077:-- Looking for ctime_s - not found
+37080:checking for minix/config.h... -- Looking for gmtime_s - not found
+37083:checking whether it is safe to define __EXTENSIONS__... -- Looking for localtime_s - not found
+37086:checking whether _XOPEN_SOURCE should be defined... -- Looking for _mkgmtime - not found
+37091:checking filesystem timestamp resolution... -- Looking for cygwin_conv_path - not found
+37195:checking whether compiler handles -Wno-clobbered... -- Looking for EFTYPE - not found
+37207:checking for /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/g++ option to enable C++11 features... -- Looking for D_MD_ORDER - not found
+37336:checking if version scripts can use complex wildcards... -- Checking support for ARCHIVE_CRYPTO_MD5_LIBC -- not found
+37344:-- Checking support for ARCHIVE_CRYPTO_RMD160_LIBC -- not found
+37349:checking for /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/gcc options needed to detect all undeclared functions... -- Checking support for ARCHIVE_CRYPTO_SHA1_LIBC -- not found
+37354:checking for /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/gcc option for timestamps after 2038... -- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC -- not found
+37361:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC -- not found
+37367:checking 32-bit host C ABI... -- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC -- not found
+37373:checking for CFPreferencesCopyAppValue... -- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC2 -- not found
+37378:checking for linux/compiler.h... -- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC2 -- not found
+37384:checking for linux/major.h... -- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC2 -- not found
+37388:checking for byteswap.h... -- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC3 -- not found
+37394:checking for err.h... -- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC3 -- not found
+37399:checking for fcntl.h... -- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC3 -- not found
+37403:checking for raise... -- Checking support for ARCHIVE_CRYPTO_MD5_LIBSYSTEM -- not found
+37411:checking for libutil.h... -- Checking support for ARCHIVE_CRYPTO_SHA1_LIBSYSTEM -- not found
+37415:checking for linux/audit.h... -- Checking support for ARCHIVE_CRYPTO_SHA256_LIBSYSTEM -- not found
+37421:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBSYSTEM -- not found
+37426:checking for random.h... -- Checking support for ARCHIVE_CRYPTO_SHA512_LIBSYSTEM -- not found
+46398:configure: WARNING: diffstat not found, some optional functionalities will be missing
+65463:checking what otool to use... not found
+73790:IDT CLOCKMATRIX as PTP clock (PTP_1588_CLOCK_IDTCM) [N/m/y/?] (NEW) 
+87938:checking what otool to use... not found
+89506:cc1: error: no include path in which to search for stdc-predef.h
+97242:  DTC     arch/arm64/boot/dts/mediatek/mt2712-evb.dtb
+97243:  DTC     arch/arm64/boot/dts/mediatek/mt6755-evb.dtb
+97244:  DTC     arch/arm64/boot/dts/mediatek/mt6779-evb.dtb
+97245:  DTC     arch/arm64/boot/dts/mediatek/mt6795-evb.dtb
+97246:  DTC     arch/arm64/boot/dts/mediatek/mt6795-sony-xperia-m5.dtb
+97247:  DTC     arch/arm64/boot/dts/mediatek/mt6797-evb.dtb
+97248:  DTC     arch/arm64/boot/dts/mediatek/mt6797-x20-dev.dtb
+97249:  DTC     arch/arm64/boot/dts/mediatek/mt7622-rfb1.dtb
+97250:  DTC     arch/arm64/boot/dts/mediatek/mt7622-bananapi-bpi-r64.dtb
+97251:  DTC     arch/arm64/boot/dts/mediatek/mt7981b-cudy-wr3000-v1.dtb
+97252:  DTC     arch/arm64/boot/dts/mediatek/mt7981b-openwrt-one.dtb
+97253:  DTC     arch/arm64/boot/dts/mediatek/mt7981b-xiaomi-ax3000t.dtb
+97254:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-acelink-ew-7886cax.dtb
+97255:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3.dtb
+97256:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3-mini.dtb
+97257:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3-emmc.dtbo
+97258:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3-nand.dtbo
+97260:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3-nor.dtbo
+97261:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3-sata.dtbo
+97262:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3-sd.dtbo
+97263:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-bananapi-bpi-r3-respeaker-2mics.dtbo
+97264:  DTC     arch/arm64/boot/dts/mediatek/mt7986a-rfb.dtb
+97265:  DTC     arch/arm64/boot/dts/mediatek/mt7986b-rfb.dtb
+97266:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-bananapi-bpi-r4.dtb
+97267:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-bananapi-bpi-r4-2g5.dtb
+97268:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-bananapi-bpi-r4-emmc.dtbo
+97271:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-bananapi-bpi-r4-sd.dtbo
+97272:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb.dtb
+97273:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-emmc.dtbo
+97274:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-eth1-aqr.dtbo
+97276:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-eth1-i2p5g-phy.dtbo
+97278:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-eth1-mxl.dtbo
+97279:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-eth1-sfp.dtbo
+97280:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-eth2-aqr.dtbo
+97281:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-eth2-mxl.dtbo
+97282:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-eth2-sfp.dtbo
+97283:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-sd.dtbo
+97285:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-snfi-nand.dtbo
+97286:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-spim-nand.dtbo
+97288:  DTC     arch/arm64/boot/dts/mediatek/mt7988a-rfb-spim-nor.dtbo
+97289:  DTC     arch/arm64/boot/dts/mediatek/mt8167-pumpkin.dtb
+97290:  DTC     arch/arm64/boot/dts/mediatek/mt8173-elm.dtb
+97292:  DTC     arch/arm64/boot/dts/mediatek/mt8173-elm-hana.dtb
+97293:  DTC     arch/arm64/boot/dts/mediatek/mt8173-elm-hana-rev7.dtb
+97294:  DTC     arch/arm64/boot/dts/mediatek/mt8173-evb.dtb
+97296:  DTC     arch/arm64/boot/dts/mediatek/mt8183-evb.dtb
+97298:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-burnet.dtb
+97300:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-cozmo.dtb
+97301:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-damu.dtb
+97302:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-fennel-sku1.dtb
+97303:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-fennel-sku6.dtb
+97304:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-fennel-sku7.dtb
+97305:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-fennel14.dtb
+97306:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-fennel14-sku2.dtb
+97307:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-juniper-sku16.dtb
+97308:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-kappa.dtb
+97310:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-kenzo.dtb
+97312:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-makomo-sku0.dtb
+97313:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-makomo-sku1.dtb
+97314:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-pico.dtb
+97315:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-pico6.dtb
+97317:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-willow-sku0.dtb
+97319:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-willow-sku1.dtb
+97322:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-kakadu.dtb
+97323:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-kakadu-sku22.dtb
+97324:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-katsu-sku32.dtb
+97325:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-katsu-sku38.dtb
+97326:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-kodama-sku16.dtb
+97327:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-kodama-sku272.dtb
+97330:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-kodama-sku288.dtb
+97331:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-kodama-sku32.dtb
+97332:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-krane-sku0.dtb
+97334:  DTC     arch/arm64/boot/dts/mediatek/mt8183-kukui-krane-sku176.dtb
+97335:  DTC     arch/arm64/boot/dts/mediatek/mt8183-pumpkin.dtb
+97336:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-chinchou-sku0.dtb
+97337:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-chinchou-sku1.dtb
+97339:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-chinchou-sku16.dtb
+97340:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-magneton-sku393216.dtb
+97341:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-magneton-sku393217.dtb
+97343:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-magneton-sku393218.dtb
+97344:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-ponyta-sku0.dtb
+97346:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-ponyta-sku1.dtb
+97349:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-rusty-sku196608.dtb
+97352:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-squirtle.dtb
+97356:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-starmie-sku0.dtb
+97359:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-starmie-sku1.dtb
+97360:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-steelix-sku131072.dtb
+97363:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-steelix-sku131073.dtb
+97364:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-tentacool-sku327681.dtb
+97365:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-tentacool-sku327683.dtb
+97366:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-tentacruel-sku262144.dtb
+97367:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-tentacruel-sku262148.dtb
+97368:  DTC     arch/arm64/boot/dts/mediatek/mt8186-corsola-voltorb.dtb
+97371:  DTC     arch/arm64/boot/dts/mediatek/mt8186-evb.dtb
+97373:  DTC     arch/arm64/boot/dts/mediatek/mt8188-evb.dtb
+97374:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku0.dtb
+97376:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku1.dtb
+97377:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku2.dtb
+97380:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku3.dtb
+97381:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku4.dtb
+97382:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku5.dtb
+97383:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku6.dtb
+97384:  DTC     arch/arm64/boot/dts/mediatek/mt8188-geralt-ciri-sku7.dtb
+97385:  DTC     arch/arm64/boot/dts/mediatek/mt8192-asurada-hayato-r1.dtb
+97386:  DTC     arch/arm64/boot/dts/mediatek/mt8192-asurada-spherion-r0.dtb
+97387:  DTC     arch/arm64/boot/dts/mediatek/mt8192-evb.dtb
+97388:  DTC     arch/arm64/boot/dts/mediatek/mt8195-cherry-dojo-r1.dtb
+97389:  DTC     arch/arm64/boot/dts/mediatek/mt8195-cherry-tomato-r1.dtb
+97390:  DTC     arch/arm64/boot/dts/mediatek/mt8195-cherry-tomato-r2.dtb
+97391:  DTC     arch/arm64/boot/dts/mediatek/mt8195-cherry-tomato-r3.dtb
+97392:  DTC     arch/arm64/boot/dts/mediatek/mt8195-demo.dtb
+97393:  DTC     arch/arm64/boot/dts/mediatek/mt8195-evb.dtb
+97394:  DTC     arch/arm64/boot/dts/mediatek/mt8365-evk.dtb
+97395:  DTC     arch/arm64/boot/dts/mediatek/mt8370-genio-510-evk.dtb
+97396:  DTC     arch/arm64/boot/dts/mediatek/mt8395-genio-1200-evk.dtb
+97397:  DTC     arch/arm64/boot/dts/mediatek/mt8390-genio-700-evk.dtb
+97398:  DTC     arch/arm64/boot/dts/mediatek/mt8395-kontron-3-5-sbc-i1200.dtb
+97399:  DTC     arch/arm64/boot/dts/mediatek/mt8395-radxa-nio-12l.dtb
+97400:  DTC     arch/arm64/boot/dts/mediatek/mt8395-radxa-nio-12l-8-hd-panel.dtbo
+97401:  DTC     arch/arm64/boot/dts/mediatek/mt8516-pumpkin.dtb
+102920:  DTC     drivers/of/empty_root.dtb
+107801:curl: (22) The requested URL returned error: 404
+107842:curl: (22) The requested URL returned error: 404
+107888:-- Looking for xlocale.h - not found
+107890:-- Looking for _isnan - not found
+107892:-- Looking for _finite - not found
+107915:-- Looking for _doprnt - not found
+107925:-- Looking for arc4random - not found
+109190:rkp-ipid.c:97:89: error: 'VERSION' undeclared (first use in this function); did you mean 'S_VERSION'?
+109219:    ERROR: package/feeds/kiddin9/rkp-ipid failed to build.
+112879:<sys/sockio.h> not found, assuming socket ioctls are in <sys/ioctl.h>.
+113197:devices/mhi_netdev_quectel.c:1656:9: error: implicit declaration of function 'hrtimer_init'; did you mean 'hrtimers_init'? [-Werror=implicit-function-declaration]
+113235:    ERROR: package/wwan/driver/quectel_MHI failed to build.
+114251:  0     0    0     0    0     0      0      0 --:--:--  0:00:05 --:--:--     0-- Looking for sys/cdefs.h - not found
+114265:-- Looking for xlocale.h - not found
+114267:-- Looking for _isnan - not found
+114271:-- Looking for _finite - not found
+114291:-- Looking for _doprnt - not found
+114311:-- Looking for arc4random - not found
+115846:curl: (22) The requested URL returned error: 404
+115855:curl: (22) The requested URL returned error: 404
+115898:-- Looking for windows.h - not found
+115902:  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0-- Looking for memfd_create - not found
+115906:-- Looking for secure_getenv - not found
+120696:-- Looking for windows.h - not found
+120742:-- Looking for GetTickCount64 - not found
+121625:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-emmc-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-emmc-ddr3)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+122035:curl: (22) The requested URL returned error: 404
+122100:curl: (22) The requested URL returned error: 404
+122117:curl: (22) The requested URL returned error: 404
+122124:curl: (22) The requested URL returned error: 404
+122131:curl: (22) The requested URL returned error: 404
+122246:-- Looking for arc4random_buf - not found
+122250:-- Looking for arc4random - not found
+122257:-- Looking for off_t - not found
+122261:-- Looking for size_t - not found
+122559:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-emmc-ddr3-1866/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-emmc-ddr3-1866)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+124495:make[3]: *** No rule to make target 'clean'.  Stop.
+125147:-- Looking for include file sys/endian.h - not found
+125413:checking for string.h... -- Looking for backtrace - not found
+125442:checking if aarch64-openwrt-linux-musl-gcc supports -fno-rtti -fno-exceptions... -- Looking for GetNumberFormat - not found
+125498:-- Looking for pthread_attr_get_np in pthread - not found
+125507:-- Looking for include files pthread.h, pthread_np.h - not found
+125737:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-nor-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-nor-ddr3)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+126616:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-sdmmc-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-sdmmc-ddr3)" BOOT_DEVICE=sdmmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+127390:checking whether make sets $(MAKE)... Checking for isnan...not found
+127400:Checking for localtime_s...not found
+127413:Checking for pread64...not found
+127417:Checking for pwrite64...not found
+127960:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-snand-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-snand-ddr3)" BOOT_DEVICE=snand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+128750:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-spim-nand-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-spim-nand-ddr3)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+129538:-- Looking for bitypes.h - not found
+129540:-- Looking for sys/ioccom.h - not found
+129542:-- Looking for sys/sockio.h - not found
+129583:-- Looking for putmsg - not found
+129585:-- Looking for putmsg in str - not found
+129618:-- Looking for getnetbyname_r - not found
+129627:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-spim-nand-ddr3-1866/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-spim-nand-ddr3-1866)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+129629:-- Looking for getprotobyname_r - not found
+129679:-- Looking for ether_hostton - not found
+129703:-- Looking for include files sys/types.h, net/bpf.h - not found
+129707:-- Looking for net/pfilt.h - not found
+129709:-- Looking for net/enet.h - not found
+129713:-- Looking for net/nit.h - not found
+129717:-- Looking for sys/net/nit.h - not found
+129724:-- Looking for net/raw.h - not found
+129728:-- Looking for sys/dlpi.h - not found
+129734:-- Looking for config/HaikuConfig.h - not found
+130246:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-spim-nand-ubi-ddr3-1866/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-spim-nand-ubi-ddr3-1866)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes   UBI=1  UBI=1 OVERRIDE_UBI_START_ADDR=0x100000 UBI=1   all
+130346:-- Looking for strtoq - not found
+130354:-- Looking for _strtoi64 - not found
+130560:configure: WARNING: Doxygen not found - continuing without Doxygen support
+131203:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-spim-nand-ubi-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-spim-nand-ubi-ddr4)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes   UBI=1  UBI=1 OVERRIDE_UBI_START_ADDR=0x100000 UBI=1   all
+131677:configure: WARNING: "Swig not found - python bindings will not be made"
+131717:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-emmc-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-emmc-ddr4)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+132837:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-nor-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-nor-ddr4)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+133235:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7981-spim-nand-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7981 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7981-spim-nand-ddr4)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+133783:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-emmc-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-emmc-ddr3)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+134310:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-nor-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-nor-ddr3)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+134956:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-sdmmc-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-sdmmc-ddr3)" BOOT_DEVICE=sdmmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+135712:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-snand-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-snand-ddr3)" BOOT_DEVICE=snand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+136219:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-spim-nand-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-spim-nand-ddr3)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+136438:The necessary bits to build these optional modules were not found:
+136665:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-spim-nand-ubi-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-spim-nand-ubi-ddr3)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes   UBI=1  UBI=1  UBI=1 OVERRIDE_UBI_START_ADDR=0x200000  all
+137276:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-emmc-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-emmc-ddr4)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+138476:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-nor-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-nor-ddr4)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+139222:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-sdmmc-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-sdmmc-ddr4)" BOOT_DEVICE=sdmmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+139712:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-snand-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-snand-ddr4)" BOOT_DEVICE=snand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+140306:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-spim-nand-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-spim-nand-ddr4)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1 NAND_TYPE=spim:2k+64 HAVE_DRAM_OBJ_FILE=yes       all
+140916:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-spim-nand-ubi-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-spim-nand-ubi-ddr4)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1 NAND_TYPE=spim:2k+64 HAVE_DRAM_OBJ_FILE=yes   UBI=1  UBI=1  UBI=1 OVERRIDE_UBI_START_ADDR=0x200000  all
+141477:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7986-spim-nand-4k-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7986 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7986-spim-nand-4k-ddr4)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1 NAND_TYPE=spim:4k+256 HAVE_DRAM_OBJ_FILE=yes       all
+142024:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7987-emmc-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7987 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7987-emmc-comb)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+142622:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7987-nor-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7987 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7987-nor-comb)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+143498:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7987-sdmmc-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7987 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7987-sdmmc-comb)" BOOT_DEVICE=sdmmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+143831:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7987-spim-nand0-ubi-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7987 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7987-spim-nand0-ubi-comb)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1 UBI=1  UBI=1  UBI=1  SPIM_CTRL=0 all
+144273:checking for XML catalog (/etc/xml/catalog)... not found
+144275:checking for DocBook XML DTD V4.4 in XML catalog... not found
+144276:checking for DocBook XSL Stylesheets in XML catalog... not found
+144509:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7987-spim-nand2-ubi-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7987 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7987-spim-nand2-ubi-comb)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1 UBI=1  UBI=1  UBI=1  SPIM_CTRL=2 all
+145132:curl: (22) The requested URL returned error: 400
+145475:The necessary bits to build these optional modules were not found:
+145508:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-emmc-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-emmc-ddr3)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+145563:The necessary bits to build these optional modules were not found:
+146753:The necessary bits to build these optional modules were not found:
+147884:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-nor-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-nor-ddr3)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+149267:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-sdmmc-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-sdmmc-ddr3)" BOOT_DEVICE=sdmmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+150143:cc1: error: unknown value 'native' for '-march'
+150291:pf_ring.c:8776:11: error: initialization of 'int (*)(struct socket *, struct sockaddr_unsized *, int)' from incompatible pointer type 'int (*)(struct socket *, struct sockaddr *, int)' [-Werror=incompatible-pointer-types]
+150769:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-snand-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-snand-ddr3)" BOOT_DEVICE=snand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+150783:    ERROR: package/feeds/packages/libpfring failed to build.
+151547:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-ddr3/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-spim-nand-ddr3)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+152352:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-emmc-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-emmc-ddr4)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+153147:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-nor-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-nor-ddr4)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+154106:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-sdmmc-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-sdmmc-ddr4)" BOOT_DEVICE=sdmmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+155135:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-snand-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-snand-ddr4)" BOOT_DEVICE=snand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+156822:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-spim-nand-ddr4)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes       all
+157577:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-emmc-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-emmc-comb)" BOOT_DEVICE=emmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+157648:  because gtk-doc >= 1.14 is not found.
+165209:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-nor-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-nor-comb)" BOOT_DEVICE=nor USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+167062:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-sdmmc-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-sdmmc-comb)" BOOT_DEVICE=sdmmc USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+168829:  100 |         fprintf(stderr,"internal error: len %d %% %d\n",req.length,
+169375:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-snand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-snand-comb)" BOOT_DEVICE=snand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+172223:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-snand-ubi-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-snand-ubi-comb)" BOOT_DEVICE=snand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1 UBI=1  UBI=1  UBI=1   all
+173132:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-spim-nand-comb)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+173184:Package kmod-fs-nfs-common-rpcsec is missing dependencies for the following libraries:
+173218:ERROR: module '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/fs/ntfs/ntfs.ko' is missing.
+173552:--   Package 'libsystemd' not found
+173555:--   Package 'libsystemd-login' not found
+173556:--   Package 'libsystemd-daemon' not found
+173557:--   Package 'libsystemd-journal' not found
+173560:--   Package 'systemd' not found
+173606:-- Looking for crt/externs.h - not found
+173620:-- Looking for execinfo.h - not found
+173643:-- Looking for io.h - not found
+173693:-- Looking for 3 include files stdint.h, ..., sys/event.h - not found
+173729:-- Looking for sys/syslimits.h - not found
+173747:-- Looking for ws2tcpip.h - not found
+173760:-- Looking for backtrace - not found
+173770:-- Looking for getpeerucred - not found
+173782:cat: write error: Broken pipe
+174434:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-ubi-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-spim-nand-ubi-comb)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1 UBI=1  UBI=1  UBI=1   all
+175514:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-ubi-ddr4/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-spim-nand-ubi-ddr4)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage DRAM_USE_DDR4=1 BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes   UBI=1  UBI=1  UBI=1   all
+176258:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-tplink-tl-7dr7299-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9 CROSS_COMPILE=aarch64-openwrt-linux-musl- OPENSSL_DIR=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" PLAT=mt7988 BUILD_STRING="OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-tplink-tl-7dr7299-comb)" BOOT_DEVICE=spim-nand USE_MKIMAGE=1 MKIMAGE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/mkimage  BOARD_BGA=1  HAVE_DRAM_OBJ_FILE=yes  DRAM_USE_COMB=1     all
+181739:ERROR: module '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/fs/ntfs/ntfs.ko' is missing.
+181748:ERROR: module '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/fs/ntfs/ntfs.ko' is missing.
+192721:    ERROR: package/kernel/linux failed to build.
+199032:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/u-boot-mt7981_rfb-spim-nand/u-boot-2025.10 CROSS_COMPILE=aarch64-openwrt-linux-musl- DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" HOSTCC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/gcc" HOSTCFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/hostpkg/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/host/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/hostpkg/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/host/include -std=gnu11" HOSTLDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib -L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/hostpkg/lib -L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/host/lib" LOCALVERSION="-OpenWrt-r0-e2325808" STAGING_PREFIX="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host" PKG_CONFIG_PATH="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib/pkgconfig" PKG_CONFIG_LIBDIR="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib/pkgconfig" PKG_CONFIG_EXTRAARGS="--static" V='' u-boot.bin
+201717:  DTC     arch/arm/dts/mt7622-rfb.dtb
+201721:  DTC     arch/arm/dts/mt7623a-unielec-u7623-02-emmc.dtb
+201729:  DTC     arch/arm/dts/mt7622-bananapi-bpi-r64.dtb
+201731:  DTC     arch/arm/dts/mt7622-linksys-e8450-ubi.dtb
+201732:  DTC     arch/arm/dts/mt7622-ubnt-unifi-6-lr.dtb
+201737:  DTC     arch/arm/dts/mt7622-ubnt-unifi-6-lr-v3.dtb
+201743:  DTC     arch/arm/dts/mt7623n-bananapi-bpi-r2.dtb
+201751:  DTC     arch/arm/dts/mt7981-rfb.dtb
+201754:  DTC     arch/arm/dts/mt7981-snfi-nand-rfb.dtb
+201762:  DTC     arch/arm/dts/mt7981-emmc-rfb.dtb
+201765:  DTC     arch/arm/dts/mt7981-sd-rfb.dtb
+201774:  DTC     arch/arm/dts/mt7986a-bpi-r3-sd.dtb
+201781:  DTC     arch/arm/dts/mt7986a-bpi-r3-emmc.dtb
+201789:  DTC     arch/arm/dts/mt7986a-rfb.dtb
+201796:  DTC     arch/arm/dts/mt7986b-rfb.dtb
+201800:  DTC     arch/arm/dts/mt7986a-sd-rfb.dtb
+201801:  DTC     arch/arm/dts/mt7986b-sd-rfb.dtb
+201803:  DTC     arch/arm/dts/mt7986a-emmc-rfb.dtb
+201808:  DTC     arch/arm/dts/mt7986b-emmc-rfb.dtb
+201824:  DTC     arch/arm/dts/mt7987a-bpi-r4-lite-spim-nand.dtb
+201832:  DTC     arch/arm/dts/mt7987a-bpi-r4-lite-emmc.dtb
+201838:  DTC     arch/arm/dts/mt7987a-bpi-r4-lite-sd.dtb
+201846:  DTC     arch/arm/dts/mt7987a-emmc-rfb.dtb
+201854:  DTC     arch/arm/dts/mt7987a-rfb.dtb
+201860:  DTC     arch/arm/dts/mt7987a-sd-rfb.dtb
+201868:  DTC     arch/arm/dts/mt7988-rfb.dtb
+201872:  DTC     arch/arm/dts/mt7988-sd-rfb.dtb
+201875:  DTC     arch/arm/dts/mt8183-pumpkin.dtb
+201876:  DTC     arch/arm/dts/mt8512-bm1-emmc.dtb
+201877:  DTC     arch/arm/dts/mt8516-pumpkin.dtb
+201880:  DTC     arch/arm/dts/mt8518-ap1-emmc.dtb
+202695:make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/u-boot-mt7981_rfb-emmc/u-boot-2025.10 CROSS_COMPILE=aarch64-openwrt-linux-musl- DTC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.18.58/scripts/dtc/dtc" HOSTCC="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/gcc" HOSTCFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/hostpkg/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/host/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/hostpkg/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/host/include -std=gnu11" HOSTLDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib -L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/hostpkg/lib -L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/host/lib" LOCALVERSION="-OpenWrt-r0-e2325808" STAGING_PREFIX="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host" PKG_CONFIG_PATH="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib/pkgconfig" PKG_CONFIG_LIBDIR="/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib/pkgconfig" PKG_CONFIG_EXTRAARGS="--static" V='' u-boot.bin
+206283:  DTC     arch/arm/dts/mt7622-rfb.dtb
+206287:  DTC     arch/arm/dts/mt7623a-unielec-u7623-02-emmc.dtb
+206294:  DTC     arch/arm/dts/mt7622-bananapi-bpi-r64.dtb
+206295:  DTC     arch/arm/dts/mt7622-linksys-e8450-ubi.dtb
+206296:  DTC     arch/arm/dts/mt7622-ubnt-unifi-6-lr.dtb
+206300:  DTC     arch/arm/dts/mt7622-ubnt-unifi-6-lr-v3.dtb
+206304:  DTC     arch/arm/dts/mt7623n-bananapi-bpi-r2.dtb
+206311:  DTC     arch/arm/dts/mt7981-rfb.dtb
+206312:  DTC     arch/arm/dts/mt7981-snfi-nand-rfb.dtb
+206318:  DTC     arch/arm/dts/mt7981-emmc-rfb.dtb
+206319:  DTC     arch/arm/dts/mt7981-sd-rfb.dtb
+206320:  DTC     arch/arm/dts/mt7986a-bpi-r3-sd.dtb
+206321:  DTC     arch/arm/dts/mt7986a-bpi-r3-emmc.dtb
+206322:  DTC     arch/arm/dts/mt7986a-rfb.dtb
+206323:  DTC     arch/arm/dts/mt7986b-rfb.dtb
+206324:  DTC     arch/arm/dts/mt7986a-sd-rfb.dtb
+206325:  DTC     arch/arm/dts/mt7986b-sd-rfb.dtb
+206326:  DTC     arch/arm/dts/mt7986a-emmc-rfb.dtb
+206327:  DTC     arch/arm/dts/mt7986b-emmc-rfb.dtb
+206328:  DTC     arch/arm/dts/mt7987a-bpi-r4-lite-spim-nand.dtb
+206329:  DTC     arch/arm/dts/mt7987a-bpi-r4-lite-emmc.dtb
+206330:  DTC     arch/arm/dts/mt7987a-bpi-r4-lite-sd.dtb
+grep: write error: Broken pipe
+--- ③b missing-dependencies 上下文（列出缺失的具体 .so）---
+173184:Package kmod-fs-nfs-common-rpcsec is missing dependencies for the following libraries:
+173185-krb5.ko
+173186-make[2]: *** [modules/fs.mk:534: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/bin/targets/mediatek/filogic/packages/kmod-fs-nfs-common-rpcsec_6.18.58-1_aarch64_cortex-a53.ipk] Error 1
+173187-aarch64-openwrt-linux-musl-gcc -DHAVE_CONFIG_H -DBUILDING_NCURSES -I../ncurses -I. -I../include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/usr/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/include/fortify  -D_FORTIFY_SOURCE=1 -DPIC -DNDEBUG -Os -pipe -mcpu=cortex-a53 -fno-caller-saves -fno-plt -fhonour-copts -fmacro-prefix-map=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/ncurses-6.6.20260801=ncurses-6.6.20260801 -Wformat -Werror=format-security -fstack-protector -Wl,-z,now -Wl,-z,relro -fPIC -std=gnu17 --param max-inline-insns-single=1200  -DNCURSES_STATIC -c ../ncurses/./base/vsscanf.c -o ../objects/vsscanf.o
+173188-'aarch64-openwrt-linux-musl-gcc'  -g -gdwarf-4 	--param=min-pagesize=0 -DDEBUG=0 -DBUILD_MESSAGE_TIMESTAMP='__TIME__", "__DATE__' -DBUILD_MESSAGE_VERSION_STRING='"v2.13.0(release):OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-spim-nand-comb)"' -DBUILD_MESSAGE_VERSION='"2.13.0"' -DENABLE_BACKTRACE=0 -DXLAT_TABLES_LIB_V2=1 -DGICV3_SUPPORT_GIC600=0 -DGICV3_SUPPORT_GIC600AE_FMU=0 -DGICV3_IMPL_GIC600_MULTICHIP=0 -DGIC_ENABLE_V4_EXTN=0 -DGIC_EXT_INTID=0 -DGIC600_ERRATA_WA_2384374=0 -DMTK_SIP_KERNEL_BOOT_ENABLE=1 -DMTK_EFUSE_PRESENT=1 -DSKIP_A57_L1_FLUSH_PWR_DWN=0 -DA53_DISABLE_NON_TEMPORAL_HINT=1 -DA57_DISABLE_NON_TEMPORAL_HINT=1 -DA57_ENABLE_NONCACHEABLE_LOAD_FWD=0 -DWORKAROUND_CVE_2017_5715=1 -DWORKAROUND_CVE_2018_3639=1 -DDYNAMIC_WORKAROUND_CVE_2018_3639=0 -DWORKAROUND_CVE_2022_23960=1 -DWORKAROUND_CVE_2024_7881=1 -DWORKAROUND_CVE_2024_5660=1 -DNEOVERSE_Nx_EXTERNAL_LLC=0 -DERRATA_A9_794073=0 -DERRATA_A15_816470=0 -DERRATA_A15_827671=0 -DERRATA_A17_852421=0 -DERRATA_A17_852423=0 -DERRATA_A35_855472=0 -DERRATA_A53_819472=0 -DERRATA_A53_824069=0 -DERRATA_A53_826319=0 -DERRATA_A53_827319=0 -DERRATA_A53_835769=0 -DERRATA_A53_836870=0 -DERRATA_A53_843419=0 -DERRATA_A53_855873=0 -DERRATA_A53_1530924=0 -DERRATA_A55_768277=0 -DERRATA_A55_778703=0 -DERRATA_A55_798797=0 -DERRATA_A55_846532=0 -DERRATA_A55_903758=0 -DERRATA_A55_1221012=0 -DERRATA_A55_1530923=0 -DERRATA_A57_806969=0 -DERRATA_A57_813419=0 -DERRATA_A57_813420=0 -DERRATA_A57_814670=0 -DERRATA_A57_817169=0 -DERRATA_A57_826974=0 -DERRATA_A57_826977=0 -DERRATA_A57_828024=0 -DERRATA_A57_829520=0 -DERRATA_A57_833471=0 -DERRATA_A57_859972=0 -DERRATA_A57_1319537=0 -DERRATA_A72_859971=0 -DERRATA_A72_1319367=0 -DERRATA_A73_852427=1 -DERRATA_A73_855423=1 -DERRATA_A75_764081=0 -DERRATA_A75_790748=0 -DERRATA_A76_1073348=0 -DERRATA_A76_1130799=0 -DERRATA_A76_1220197=0 -DERRATA_A76_1257314=0 -DERRATA_A76_1262606=0 -DERRATA_A76_1262888=0 -DERRATA_A76_1275112=0 -DERRATA_A76_1286807=0 -DERRATA_A76_1791580=0 -DERRATA_A76_1165522=0 -DERRATA_A76_1868343=0 -DERRATA_A76_1946160=0 -DERRATA_A76_2743102=0 -DERRATA_A77_1508412=0 -DERRATA_A77_1925769=0 -DERRATA_A77_1946167=0 -DERRATA_A77_1791578=0 -DERRATA_A77_2356587=0 -DERRATA_A77_1800714=0 -DERRATA_A77_2743100=0 -DERRATA_A78_1688305=0 -DERRATA_A78_1941498=0 -DERRATA_A78_1951500=0 -DERRATA_A78_1821534=0 -DERRATA_A78_1952683=0 -DERRATA_A78_2242635=0 -DERRATA_A78_2376745=0 -DERRATA_A78_2395406=0 -DERRATA_A78_2712571=0 -DERRATA_A78_2742426=0 -DERRATA_A78_2772019=0 -DERRATA_A78_2779479=0 -DERRATA_A78_AE_1941500=0 -DERRATA_A78_AE_1951502=0 -DERRATA_A78_AE_2376748=0 -DERRATA_A78_AE_2395408=0 -DERRATA_A78C_1827430=0 -DERRATA_A78C_1827440=0 -DERRATA_A78_AE_2712574=0 -DERRATA_A78C_2242638=0 -DERRATA_A78C_2376749=0 -DERRATA_A78C_2395411=0 -DERRATA_A78C_2683027=0 -DERRATA_A78C_2712575=0 -DERRATA_A78C_2743232=0 -DERRATA_A78C_2772121=0 -DERRATA_A78C_2779484=0 -DERRATA_X1_1821534=0 -DERRATA_X1_1688305=0 -DERRATA_X1_1827429=0 -DERRATA_N1_1043202=0 -DERRATA_N1_1073348=0 -DERRATA_N1_1130799=0 -DERRATA_N1_1165347=0 -DERRATA_N1_1207823=0 -DERRATA_N1_1220197=0 -DERRATA_N1_1257314=0 -DERRATA_N1_1262606=0 -DERRATA_N1_1262888=0 -DERRATA_N1_1275112=0 -DERRATA_N1_1315703=0 -DERRATA_N1_1542419=0 -DERRATA_N1_1868343=0 -DERRATA_N1_1946160=0 -DERRATA_N1_2743102=0 -DERRATA_V1_1618635=0 -DERRATA_V1_1774420=0 -DERRATA_V1_1791573=0 -DERRATA_V1_1852267=0 -DERRATA_V1_1925756=0 -DERRATA_V1_1940577=0 -DERRATA_V1_1966096=0 -DERRATA_V1_2139242=0 -DERRATA_V1_2216392=0 -DERRATA_V1_2294912=0 -DERRATA_V1_2348377=0 -DERRATA_V1_2372203=0 -DERRATA_V1_2701953=0 -DERRATA_V1_2743093=0 -DERRATA_V1_2743233=0 -DERRATA_V1_2779461=0 -DERRATA_V3_2970647=0 -DERRATA_V3_3701767=0 -DERRATA_A710_1901946=0 -DERRATA_A710_1916945=0 -DERRATA_A710_1917258=0 -DERRATA_A710_1927200=0 -DERRATA_A710_1987031=0 -DERRATA_A710_2081180=0 -DERRATA_A710_2083908=0 -DERRATA_A710_2055002=0 -DERRATA_A710_2017096=0 -DERRATA_A710_2267065=0 -DERRATA_A710_2136059=0 -DERRATA_A710_2147715=0 -DERRATA_A710_2216384=0 -DERRATA_A710_2282622=0 -DERRATA_A710_2291219=0 -DERRATA_A710_2008768=0 -DERRATA_A710_2371105=0 -DERRATA_A710_2701952=0 -DERRATA_A710_2742423=0 -DERRATA_A710_2768515=0 -DERRATA_A710_2778471=0 -DERRATA_A710_3701772=0 -DERRATA_N2_2002655=0 -DERRATA_N2_2009478=0 -DERRATA_N2_2067956=0 -DERRATA_N2_2025414=0 -DERRATA_N2_2189731=0 -DERRATA_N2_2138956=0 -DERRATA_N2_2242415=0 -DERRATA_N2_2138958=0 -DERRATA_N2_2242400=0 -DERRATA_N2_2280757=0 -DERRATA_N2_2326639=0 -DERRATA_N2_2340933=0 -DERRATA_N2_2346952=0 -DERRATA_N2_2376738=0 -DERRATA_N2_2388450=0 -DERRATA_N2_2728475=0 -DERRATA_N2_2743014=0 -DERRATA_N2_2743089=0 -DERRATA_N2_2779511=0 -DERRATA_N2_3701773=0 -DERRATA_N3_3699563=0 -DERRATA_X2_2002765=0 -DERRATA_X2_2083908=0 -DERRATA_X2_2017096=0 -DERRATA_X2_2081180=0 -DERRATA_X2_2216384=0 -DERRATA_X2_2147715=0 -DERRATA_X2_2282622=0 -DERRATA_X2_2371105=0 -DERRATA_X2_2701952=0 -DERRATA_X2_2742423=0 -DERRATA_X2_2768515=0 -DERRATA_X2_2778471=0 -DERRATA_X2_3701772=0 -DERRATA_X3_2266875=0 -DERRATA_X3_2302506=0 -DERRATA_X3_2313909=0 -DERRATA_X3_2372204=0 -DERRATA_X3_2615812=0 -DERRATA_X3_2641945=0 -DERRATA_X3_2701951=0 -DERRATA_X3_2742421=0 -DERRATA_X3_2743088=0 -DERRATA_X3_3701769=0 -DERRATA_X3_2779509=0 -DERRATA_X4_2701112=0 -DERRATA_X4_2726228=0 -DERRATA_X4_2740089=0 -DERRATA_X4_2763018=0 -DERRATA_X4_2816013=0 -DERRATA_X4_2897503=0 -DERRATA_X4_2923985=0 -DERRATA_X4_2957258=0 -DERRATA_X4_3076789=0 -DERRATA_X4_3701758=0 -DERRATA_X925_2963999=0 -DERRATA_X925_3701747=0 -DERRATA_A510_1922240=0 -DERRATA_A510_2288014=0 -DERRATA_A510_2042739=0 -DERRATA_A510_2041909=0 -DERRATA_A510_2080326=0 -DERRATA_A510_2250311=0 -DERRATA_A510_2218950=0 -DERRATA_A510_2172148=0 -DERRATA_A510_2347730=0 -DERRATA_A510_2371937=0 -DERRATA_A510_2666669=0 -DERRATA_A510_2684597=0 -DERRATA_A510_2971420=0 -DERRATA_A520_2630792=0 -DERRATA_A520_2858100=0 -DERRATA_A520_2938996=0 -DERRATA_V2_2618597=0 -DERRATA_V2_2662553=0 -DERRATA_V2_2719103=0 -DERRATA_V2_2719105=0 -DERRATA_V2_2743011=0 -DERRATA_V2_2779510=0 -DERRATA_V2_2801372=0 -DERRATA_A715_2331818=0 -DERRATA_A715_2344187=0 -DERRATA_A715_2413290=0 -DERRATA_A715_2420947=0 -DERRATA_A715_2429384=0 -DERRATA_A715_2561034=0 -DERRATA_A715_2728106=0 -DERRATA_A715_2804830=0 -DERRATA_A715_3699560=0 -DERRATA_A720_2792132=0 -DERRATA_A720_2844092=0 -DERRATA_A720_2926083=0 -DERRATA_A720_2940794=0 -DERRATA_A720_3699561=0 -DERRATA_A720_AE_3699562=0 -DERRATA_A725_3699564=0 -DERRATA_DSU_798953=0 -DERRATA_DSU_936184=0 -DERRATA_DSU_2313941=0 -DERRATA_DSU_2900952=0 -DUSE_GIC_DRIVER=1 -DSTACK_PROTECTOR_ENABLED=0 -DCRASH_REPORTING=0 -DEL3_EXCEPTION_HANDLING=0 -DSDEI_SUPPORT=0 -DUSE_DSU_DRIVER=0 -DALLOW_RO_XLAT_TABLES=0 -DAMU_RESTRICT_COUNTERS=1 -DARCH_FEATURE_AVAILABILITY=0 -DARM_ARCH_MAJOR=8 -DARM_ARCH_MINOR=0 -DARM_IO_IN_DTB=0 -DBL2_ENABLE_SP_LOAD=0 -DBL2_INV_DCACHE=1 -DBL2_IN_XIP_MEM=0 -DBL2_RUNS_AT_EL3=1 -DCOLD_BOOT_SINGLE_CPU=0 -DCONDITIONAL_CMO=0 -DCOT_DESC_IN_DTB=0 -DCRYPTO_SUPPORT=0 -DCTX_INCLUDE_AARCH32_REGS=1 -DCTX_INCLUDE_EL2_REGS=0 -DCTX_INCLUDE_FPREGS=0 -DCTX_INCLUDE_MPAM_REGS=0 -DCTX_INCLUDE_NEVE_REGS=0 -DCTX_INCLUDE_PAUTH_REGS=0 -DCTX_INCLUDE_SVE_REGS=0 -DDECRYPTION_SUPPORT_none -DDICE_PROTECTION_ENVIRONMENT=0 -DDISABLE_MTPMU=0 -DDISCRETE_TPM=0 -DDRTM_SUPPORT=0 -DEARLY_CONSOLE=0 -DEL3_EXCEPTION_HANDLING=0 -DENABLE_AMU_AUXILIARY_COUNTERS=0 -DENABLE_ASSERTIONS=0 -DENABLE_BRBE_FOR_NS=0 -DENABLE_BTI=0 -DENABLE_CONSOLE_GETC=0 -DENABLE_FEAT_AMU=0 -DENABLE_FEAT_AMUv1p1=0 -DENABLE_FEAT_CSV2_2=0 -DENABLE_FEAT_CSV2_3=0 -DENABLE_FEAT_D128=0 -DENABLE_FEAT_DEBUGV8P9=0 -DENABLE_FEAT_DIT=0 -DENABLE_FEAT_ECV=0 -DENABLE_FEAT_FGT=0 -DENABLE_FEAT_FGT2=0 -DENABLE_FEAT_FPMR=0 -DENABLE_FEAT_GCIE=0 -DENABLE_FEAT_GCS=0 -DENABLE_FEAT_HCX=0 -DENABLE_FEAT_LS64_ACCDATA=0 -DENABLE_FEAT_MEC=0 -DENABLE_FEAT_MOPS=0 -DENABLE_FEAT_MPAM=2 -DENABLE_FEAT_MTE2=0 -DENABLE_FEAT_PAN=0 -DENABLE_FEAT_PAUTH_LR=0 -DENABLE_FEAT_RAS=0 -DENABLE_FEAT_RNG=0 -DENABLE_FEAT_RNG_TRAP=0 -DENABLE_FEAT_S1PIE=0 -DENABLE_FEAT_S1POE=0 -DENABLE_FEAT_S2PIE=0 -DENABLE_FEAT_S2POE=0 -DENABLE_FEAT_SB=0 -DENABLE_FEAT_SCTLR2=0 -DENABLE_FEAT_SEL2=0 -DENABLE_FEAT_TCR2=0 -DENABLE_FEAT_THE=0 -DENABLE_FEAT_TWED=0 -DENABLE_FEAT_VHE=0 -DENABLE_MPMM=0 -DENABLE_PAUTH=0 -DENABLE_PIE=0 -DENABLE_PMF=0 -DENABLE_PSCI_STAT=0 -DENABLE_RME=0 -DENABLE_RUNTIME_INSTRUMENTATION=0 -DENABLE_SME2_FOR_NS=0 -DENABLE_SME_FOR_NS=0 -DENABLE_SME_FOR_SWD=0 -DENABLE_SPE_FOR_NS=2 -DENABLE_SPMD_LP=0 -DENABLE_SVE_FOR_NS=0 -DENABLE_SVE_FOR_SWD=0 -DENABLE_SYS_REG_TRACE_FOR_NS=0 -DENABLE_TRBE_FOR_NS=0 -DENABLE_TRF_FOR_NS=0 -DENCRYPT_BL31=0 -DENCRYPT_BL32=0 -DENCRYPT_BL33=0 -DERRATA_ABI_SUPPORT=0 -DERRATA_NON_ARM_INTERCONNECT=0 -DERRATA_SME_POWER_DOWN=0 -DERRATA_SPECULATIVE_AT=0 -DERROR_DEPRECATED=0 -DFAULT_INJECTION_SUPPORT=0 -DFEATURE_DETECTION=0 -DFEAT_PABANDON=0 -DFFH_SUPPORT=0 -DGICV2_G0_FOR_EL3=0 -DHANDLE_EA_EL3_FIRST_NS=0 -DHOB_LIST=0 -DHW_ASSISTED_COHERENCY=0 -DIMPDEF_SYSREG_TRAP=0 -DINIT_UNUSED_NS_EL2=0 -DLFA_SUPPORT=0 -DLOG_LEVEL=20 -DMEASURED_BOOT=0 -DNR_OF_FW_BANKS=2 -DNR_OF_IMAGES_IN_FW_BANK=1 -DNS_TIMER_SWITCH=0 -DPL011_GENERIC_UART=0 -DPLATFORM_REPORT_CTX_MEM_USE=0 -DPLAT_mt7988 -DPRESERVE_DSU_PMU_REGS=0 -DPROGRAMMABLE_RESET_ADDRESS=1 -DPSA_CRYPTO=0 -DPSA_FWU_METADATA_FW_STORE_DESC=0 -DPSA_FWU_SUPPORT=0 -DPSCI_EXTENDED_STATE_ID=0 -DPSCI_OS_INIT_MODE=0 -DRAS_TRAP_NS_ERR_REC_ACCESS=0 -DRECLAIM_INIT_CODE=0 -DRESET_TO_BL2=1 -DRESET_TO_BL31=0 -DRME_GPT_BITLOCK_BLOCK=1 -DRME_GPT_MAX_BLOCK=512 -DRMMD_ENABLE_EL3_TOKEN_SIGN=0 -DRMMD_ENABLE_IDE_KEY_PROG=0 -DSDEI_IN_FCONF=0 -DSEC_INT_DESC_IN_FCONF=0 -DSEPARATE_BL2_NOLOAD_REGION=0 -DSEPARATE_CODE_AND_RODATA=0 -DSEPARATE_NOBITS_REGION=0 -DSEPARATE_RWDATA_REGION=0 -DSEPARATE_SIMD_SECTION=0 -DSPD_none -DSPIN_ON_BL1_EXIT=0 -DSPMC_AT_EL3=0 -DSPMC_AT_EL3_SEL0_SP=0 -DSPMD_SPM_AT_SEL2=1 -DSPM_MM=0 -DSVE_VECTOR_LEN=2048 -DTRANSFER_LIST=0 -DTRNG_SUPPORT=0 -DTRUSTED_BOARD_BOOT=0 -DTWED_DELAY=0 -DUSE_COHERENT_MEM=1 -DUSE_DEBUGFS=0 -DUSE_ROMLIB=0 -DUSE_SP804_TIMER=0 -DUSE_SPINLOCK_CAS=0 -DUSE_TBBR_DEFS=1 -DWARMBOOT_ENABLE_DCACHE_EARLY=0 -Iinclude -Iinclude/arch/aarch64 -Iinclude/lib/cpus/aarch64 -Iinclude/lib/el3_runtime/aarch64 -Iinclude/plat/arm/common -Iinclude/plat/arm/common/aarch64 -Iplat/mediatek/apsoc_common -Iplat/mediatek/apsoc_common/drivers/uart -Iplat/mediatek/apsoc_common/drivers/trng/v2 -Iplat/mediatek/apsoc_common/drivers/wdt -Iplat/mediatek/mt7988/drivers/dram -Iplat/mediatek/mt7988/drivers/pll -Iplat/mediatek/mt7988/drivers/spmc -Iplat/mediatek/mt7988/drivers/timer -Iplat/mediatek/mt7988/drivers/devapc -Iplat/mediatek/mt7988/include -Iplat/mediatek/mt7988/drivers/dram -Iplat/mediatek/apsoc_common/bl2/include -Iplat/mediatek/apsoc_common/drivers/efuse -Iplat/mediatek/apsoc_common/drivers/efuse/include -Iplat/mediatek/mt7988/drivers/efuse -Iplat/mediatek/apsoc_common/img_dec/include -Iplat/mediatek/apsoc_common/img_dec/roe  -Iinclude/lib/libfdt -Iinclude/lib/xz -Iinclude/lib/libc -Iinclude/lib/libc/aarch64   -nostdinc -Werror -Wall -Wmissing-include-dirs -Wunused -Wdisabled-optimization -Wvla -Wshadow -Wredundant-decls -Wextra -Wno-trigraphs -Wno-missing-field-initializers -Wno-type-limits -Wno-sign-compare  -Wno-unused-parameter -Wunused-but-set-variable -Wmaybe-uninitialized -Wpacked-bitfield-compat -Wshift-overflow=2 -Wlogical-op -DOPTEE_TZRAM_SIZE=0x10000 -Wno-error=deprecated-declarations -Wno-error=cpp -mgeneral-regs-only -mstrict-align -ffunction-sections -fdata-sections -ffreestanding -fno-common -Os -std=gnu99 -DXZ_DEC_SINGLE -march=armv8-a -fno-stack-protector  -DDTB_PATH=\"/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/fdts/mt7988-spi0.dtb\" -Iplat/mediatek/apsoc_common/drivers/spi -Iplat/mediatek/mt7988/drivers/gpio -Iplat/mediatek/mt7988/drivers/spi -DDRAM_USE_COMB -DBL2_BASE=0x201000 -Iplat/mediatek/apsoc_common/bl2 -Iinclude/lib/libfdt -Iplat/mediatek/apsoc_common/drivers/spi_nand -DMTK_PLAT_KEY -DIMAGE_AT_EL3 -DIMAGE_BL2    -Wp,-MD,/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/bl2/core.d -MT /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/bl2/core.o -MP -c drivers/mtd/nand/core.c -o /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/bl2/core.o
+173189-aarch64-openwrt-linux-musl-gcc -Os -pipe -mcpu=cortex-a53 -fno-caller-saves -fno-plt -fhonour-copts -fmacro-prefix-map=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/libselinux-3.10=libselinux-3.10 -Wformat -Werror=format-security -fstack-protector -D_FORTIFY_SOURCE=1 -Wl,-z,now -Wl,-z,relro -D_LARGEFILE64_SOURCE  -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/usr/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/include/fortify  -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -I../include -D_GNU_SOURCE  -DUSE_PCRE2 -DPCRE2_CODE_UNIT_WIDTH=8 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/usr/include  -L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/usr/lib -L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/lib -fuse-ld=bfd -znow -zrelro  -L../src  selabel_lookup_best_match.c  -lselinux -lfts -L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/target-aarch64_cortex-a53_musl/usr/lib -lpcre2-8 -o selabel_lookup_best_match
+173190-aarch64-openwrt-linux-musl-gcc -DHAVE_CONFIG_H -DBUILDING_NCURSES -I../ncurses -I. -I../include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/usr/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/include/fortify  -D_FORTIFY_SOURCE=1 -DPIC -DNDEBUG -Os -pipe -mcpu=cortex-a53 -fno-caller-saves -fno-plt -fhonour-copts -fmacro-prefix-map=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/ncurses-6.6.20260801=ncurses-6.6.20260801 -Wformat -Werror=format-security -fstack-protector -Wl,-z,now -Wl,-z,relro -fPIC -std=gnu17 --param max-inline-insns-single=1200  -DNCURSES_STATIC -c ../ncurses/./base/lib_freeall.c -o ../objects/lib_freeall.o
+173191-rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/packages/ipkg-aarch64_cortex-a53/kmod-fs-nfs-v3/lib/modules/6.18.58/nfsv3.ko: relocatable
+173192-'aarch64-openwrt-linux-musl-gcc'  -g -gdwarf-4 	--param=min-pagesize=0 -DDEBUG=0 -DBUILD_MESSAGE_TIMESTAMP='__TIME__", "__DATE__' -DBUILD_MESSAGE_VERSION_STRING='"v2.13.0(release):OpenWrt v2025-07-11-78a0dfd9-1 (mt7988-spim-nand-comb)"' -DBUILD_MESSAGE_VERSION='"2.13.0"' -DENABLE_BACKTRACE=0 -DXLAT_TABLES_LIB_V2=1 -DGICV3_SUPPORT_GIC600=0 -DGICV3_SUPPORT_GIC600AE_FMU=0 -DGICV3_IMPL_GIC600_MULTICHIP=0 -DGIC_ENABLE_V4_EXTN=0 -DGIC_EXT_INTID=0 -DGIC600_ERRATA_WA_2384374=0 -DMTK_SIP_KERNEL_BOOT_ENABLE=1 -DMTK_EFUSE_PRESENT=1 -DSKIP_A57_L1_FLUSH_PWR_DWN=0 -DA53_DISABLE_NON_TEMPORAL_HINT=1 -DA57_DISABLE_NON_TEMPORAL_HINT=1 -DA57_ENABLE_NONCACHEABLE_LOAD_FWD=0 -DWORKAROUND_CVE_2017_5715=1 -DWORKAROUND_CVE_2018_3639=1 -DDYNAMIC_WORKAROUND_CVE_2018_3639=0 -DWORKAROUND_CVE_2022_23960=1 -DWORKAROUND_CVE_2024_7881=1 -DWORKAROUND_CVE_2024_5660=1 -DNEOVERSE_Nx_EXTERNAL_LLC=0 -DERRATA_A9_794073=0 -DERRATA_A15_816470=0 -DERRATA_A15_827671=0 -DERRATA_A17_852421=0 -DERRATA_A17_852423=0 -DERRATA_A35_855472=0 -DERRATA_A53_819472=0 -DERRATA_A53_824069=0 -DERRATA_A53_826319=0 -DERRATA_A53_827319=0 -DERRATA_A53_835769=0 -DERRATA_A53_836870=0 -DERRATA_A53_843419=0 -DERRATA_A53_855873=0 -DERRATA_A53_1530924=0 -DERRATA_A55_768277=0 -DERRATA_A55_778703=0 -DERRATA_A55_798797=0 -DERRATA_A55_846532=0 -DERRATA_A55_903758=0 -DERRATA_A55_1221012=0 -DERRATA_A55_1530923=0 -DERRATA_A57_806969=0 -DERRATA_A57_813419=0 -DERRATA_A57_813420=0 -DERRATA_A57_814670=0 -DERRATA_A57_817169=0 -DERRATA_A57_826974=0 -DERRATA_A57_826977=0 -DERRATA_A57_828024=0 -DERRATA_A57_829520=0 -DERRATA_A57_833471=0 -DERRATA_A57_859972=0 -DERRATA_A57_1319537=0 -DERRATA_A72_859971=0 -DERRATA_A72_1319367=0 -DERRATA_A73_852427=1 -DERRATA_A73_855423=1 -DERRATA_A75_764081=0 -DERRATA_A75_790748=0 -DERRATA_A76_1073348=0 -DERRATA_A76_1130799=0 -DERRATA_A76_1220197=0 -DERRATA_A76_1257314=0 -DERRATA_A76_1262606=0 -DERRATA_A76_1262888=0 -DERRATA_A76_1275112=0 -DERRATA_A76_1286807=0 -DERRATA_A76_1791580=0 -DERRATA_A76_1165522=0 -DERRATA_A76_1868343=0 -DERRATA_A76_1946160=0 -DERRATA_A76_2743102=0 -DERRATA_A77_1508412=0 -DERRATA_A77_1925769=0 -DERRATA_A77_1946167=0 -DERRATA_A77_1791578=0 -DERRATA_A77_2356587=0 -DERRATA_A77_1800714=0 -DERRATA_A77_2743100=0 -DERRATA_A78_1688305=0 -DERRATA_A78_1941498=0 -DERRATA_A78_1951500=0 -DERRATA_A78_1821534=0 -DERRATA_A78_1952683=0 -DERRATA_A78_2242635=0 -DERRATA_A78_2376745=0 -DERRATA_A78_2395406=0 -DERRATA_A78_2712571=0 -DERRATA_A78_2742426=0 -DERRATA_A78_2772019=0 -DERRATA_A78_2779479=0 -DERRATA_A78_AE_1941500=0 -DERRATA_A78_AE_1951502=0 -DERRATA_A78_AE_2376748=0 -DERRATA_A78_AE_2395408=0 -DERRATA_A78C_1827430=0 -DERRATA_A78C_1827440=0 -DERRATA_A78_AE_2712574=0 -DERRATA_A78C_2242638=0 -DERRATA_A78C_2376749=0 -DERRATA_A78C_2395411=0 -DERRATA_A78C_2683027=0 -DERRATA_A78C_2712575=0 -DERRATA_A78C_2743232=0 -DERRATA_A78C_2772121=0 -DERRATA_A78C_2779484=0 -DERRATA_X1_1821534=0 -DERRATA_X1_1688305=0 -DERRATA_X1_1827429=0 -DERRATA_N1_1043202=0 -DERRATA_N1_1073348=0 -DERRATA_N1_1130799=0 -DERRATA_N1_1165347=0 -DERRATA_N1_1207823=0 -DERRATA_N1_1220197=0 -DERRATA_N1_1257314=0 -DERRATA_N1_1262606=0 -DERRATA_N1_1262888=0 -DERRATA_N1_1275112=0 -DERRATA_N1_1315703=0 -DERRATA_N1_1542419=0 -DERRATA_N1_1868343=0 -DERRATA_N1_1946160=0 -DERRATA_N1_2743102=0 -DERRATA_V1_1618635=0 -DERRATA_V1_1774420=0 -DERRATA_V1_1791573=0 -DERRATA_V1_1852267=0 -DERRATA_V1_1925756=0 -DERRATA_V1_1940577=0 -DERRATA_V1_1966096=0 -DERRATA_V1_2139242=0 -DERRATA_V1_2216392=0 -DERRATA_V1_2294912=0 -DERRATA_V1_2348377=0 -DERRATA_V1_2372203=0 -DERRATA_V1_2701953=0 -DERRATA_V1_2743093=0 -DERRATA_V1_2743233=0 -DERRATA_V1_2779461=0 -DERRATA_V3_2970647=0 -DERRATA_V3_3701767=0 -DERRATA_A710_1901946=0 -DERRATA_A710_1916945=0 -DERRATA_A710_1917258=0 -DERRATA_A710_1927200=0 -DERRATA_A710_1987031=0 -DERRATA_A710_2081180=0 -DERRATA_A710_2083908=0 -DERRATA_A710_2055002=0 -DERRATA_A710_2017096=0 -DERRATA_A710_2267065=0 -DERRATA_A710_2136059=0 -DERRATA_A710_2147715=0 -DERRATA_A710_2216384=0 -DERRATA_A710_2282622=0 -DERRATA_A710_2291219=0 -DERRATA_A710_2008768=0 -DERRATA_A710_2371105=0 -DERRATA_A710_2701952=0 -DERRATA_A710_2742423=0 -DERRATA_A710_2768515=0 -DERRATA_A710_2778471=0 -DERRATA_A710_3701772=0 -DERRATA_N2_2002655=0 -DERRATA_N2_2009478=0 -DERRATA_N2_2067956=0 -DERRATA_N2_2025414=0 -DERRATA_N2_2189731=0 -DERRATA_N2_2138956=0 -DERRATA_N2_2242415=0 -DERRATA_N2_2138958=0 -DERRATA_N2_2242400=0 -DERRATA_N2_2280757=0 -DERRATA_N2_2326639=0 -DERRATA_N2_2340933=0 -DERRATA_N2_2346952=0 -DERRATA_N2_2376738=0 -DERRATA_N2_2388450=0 -DERRATA_N2_2728475=0 -DERRATA_N2_2743014=0 -DERRATA_N2_2743089=0 -DERRATA_N2_2779511=0 -DERRATA_N2_3701773=0 -DERRATA_N3_3699563=0 -DERRATA_X2_2002765=0 -DERRATA_X2_2083908=0 -DERRATA_X2_2017096=0 -DERRATA_X2_2081180=0 -DERRATA_X2_2216384=0 -DERRATA_X2_2147715=0 -DERRATA_X2_2282622=0 -DERRATA_X2_2371105=0 -DERRATA_X2_2701952=0 -DERRATA_X2_2742423=0 -DERRATA_X2_2768515=0 -DERRATA_X2_2778471=0 -DERRATA_X2_3701772=0 -DERRATA_X3_2266875=0 -DERRATA_X3_2302506=0 -DERRATA_X3_2313909=0 -DERRATA_X3_2372204=0 -DERRATA_X3_2615812=0 -DERRATA_X3_2641945=0 -DERRATA_X3_2701951=0 -DERRATA_X3_2742421=0 -DERRATA_X3_2743088=0 -DERRATA_X3_3701769=0 -DERRATA_X3_2779509=0 -DERRATA_X4_2701112=0 -DERRATA_X4_2726228=0 -DERRATA_X4_2740089=0 -DERRATA_X4_2763018=0 -DERRATA_X4_2816013=0 -DERRATA_X4_2897503=0 -DERRATA_X4_2923985=0 -DERRATA_X4_2957258=0 -DERRATA_X4_3076789=0 -DERRATA_X4_3701758=0 -DERRATA_X925_2963999=0 -DERRATA_X925_3701747=0 -DERRATA_A510_1922240=0 -DERRATA_A510_2288014=0 -DERRATA_A510_2042739=0 -DERRATA_A510_2041909=0 -DERRATA_A510_2080326=0 -DERRATA_A510_2250311=0 -DERRATA_A510_2218950=0 -DERRATA_A510_2172148=0 -DERRATA_A510_2347730=0 -DERRATA_A510_2371937=0 -DERRATA_A510_2666669=0 -DERRATA_A510_2684597=0 -DERRATA_A510_2971420=0 -DERRATA_A520_2630792=0 -DERRATA_A520_2858100=0 -DERRATA_A520_2938996=0 -DERRATA_V2_2618597=0 -DERRATA_V2_2662553=0 -DERRATA_V2_2719103=0 -DERRATA_V2_2719105=0 -DERRATA_V2_2743011=0 -DERRATA_V2_2779510=0 -DERRATA_V2_2801372=0 -DERRATA_A715_2331818=0 -DERRATA_A715_2344187=0 -DERRATA_A715_2413290=0 -DERRATA_A715_2420947=0 -DERRATA_A715_2429384=0 -DERRATA_A715_2561034=0 -DERRATA_A715_2728106=0 -DERRATA_A715_2804830=0 -DERRATA_A715_3699560=0 -DERRATA_A720_2792132=0 -DERRATA_A720_2844092=0 -DERRATA_A720_2926083=0 -DERRATA_A720_2940794=0 -DERRATA_A720_3699561=0 -DERRATA_A720_AE_3699562=0 -DERRATA_A725_3699564=0 -DERRATA_DSU_798953=0 -DERRATA_DSU_936184=0 -DERRATA_DSU_2313941=0 -DERRATA_DSU_2900952=0 -DUSE_GIC_DRIVER=1 -DSTACK_PROTECTOR_ENABLED=0 -DCRASH_REPORTING=0 -DEL3_EXCEPTION_HANDLING=0 -DSDEI_SUPPORT=0 -DUSE_DSU_DRIVER=0 -DALLOW_RO_XLAT_TABLES=0 -DAMU_RESTRICT_COUNTERS=1 -DARCH_FEATURE_AVAILABILITY=0 -DARM_ARCH_MAJOR=8 -DARM_ARCH_MINOR=0 -DARM_IO_IN_DTB=0 -DBL2_ENABLE_SP_LOAD=0 -DBL2_INV_DCACHE=1 -DBL2_IN_XIP_MEM=0 -DBL2_RUNS_AT_EL3=1 -DCOLD_BOOT_SINGLE_CPU=0 -DCONDITIONAL_CMO=0 -DCOT_DESC_IN_DTB=0 -DCRYPTO_SUPPORT=0 -DCTX_INCLUDE_AARCH32_REGS=1 -DCTX_INCLUDE_EL2_REGS=0 -DCTX_INCLUDE_FPREGS=0 -DCTX_INCLUDE_MPAM_REGS=0 -DCTX_INCLUDE_NEVE_REGS=0 -DCTX_INCLUDE_PAUTH_REGS=0 -DCTX_INCLUDE_SVE_REGS=0 -DDECRYPTION_SUPPORT_none -DDICE_PROTECTION_ENVIRONMENT=0 -DDISABLE_MTPMU=0 -DDISCRETE_TPM=0 -DDRTM_SUPPORT=0 -DEARLY_CONSOLE=0 -DEL3_EXCEPTION_HANDLING=0 -DENABLE_AMU_AUXILIARY_COUNTERS=0 -DENABLE_ASSERTIONS=0 -DENABLE_BRBE_FOR_NS=0 -DENABLE_BTI=0 -DENABLE_CONSOLE_GETC=0 -DENABLE_FEAT_AMU=0 -DENABLE_FEAT_AMUv1p1=0 -DENABLE_FEAT_CSV2_2=0 -DENABLE_FEAT_CSV2_3=0 -DENABLE_FEAT_D128=0 -DENABLE_FEAT_DEBUGV8P9=0 -DENABLE_FEAT_DIT=0 -DENABLE_FEAT_ECV=0 -DENABLE_FEAT_FGT=0 -DENABLE_FEAT_FGT2=0 -DENABLE_FEAT_FPMR=0 -DENABLE_FEAT_GCIE=0 -DENABLE_FEAT_GCS=0 -DENABLE_FEAT_HCX=0 -DENABLE_FEAT_LS64_ACCDATA=0 -DENABLE_FEAT_MEC=0 -DENABLE_FEAT_MOPS=0 -DENABLE_FEAT_MPAM=2 -DENABLE_FEAT_MTE2=0 -DENABLE_FEAT_PAN=0 -DENABLE_FEAT_PAUTH_LR=0 -DENABLE_FEAT_RAS=0 -DENABLE_FEAT_RNG=0 -DENABLE_FEAT_RNG_TRAP=0 -DENABLE_FEAT_S1PIE=0 -DENABLE_FEAT_S1POE=0 -DENABLE_FEAT_S2PIE=0 -DENABLE_FEAT_S2POE=0 -DENABLE_FEAT_SB=0 -DENABLE_FEAT_SCTLR2=0 -DENABLE_FEAT_SEL2=0 -DENABLE_FEAT_TCR2=0 -DENABLE_FEAT_THE=0 -DENABLE_FEAT_TWED=0 -DENABLE_FEAT_VHE=0 -DENABLE_MPMM=0 -DENABLE_PAUTH=0 -DENABLE_PIE=0 -DENABLE_PMF=0 -DENABLE_PSCI_STAT=0 -DENABLE_RME=0 -DENABLE_RUNTIME_INSTRUMENTATION=0 -DENABLE_SME2_FOR_NS=0 -DENABLE_SME_FOR_NS=0 -DENABLE_SME_FOR_SWD=0 -DENABLE_SPE_FOR_NS=2 -DENABLE_SPMD_LP=0 -DENABLE_SVE_FOR_NS=0 -DENABLE_SVE_FOR_SWD=0 -DENABLE_SYS_REG_TRACE_FOR_NS=0 -DENABLE_TRBE_FOR_NS=0 -DENABLE_TRF_FOR_NS=0 -DENCRYPT_BL31=0 -DENCRYPT_BL32=0 -DENCRYPT_BL33=0 -DERRATA_ABI_SUPPORT=0 -DERRATA_NON_ARM_INTERCONNECT=0 -DERRATA_SME_POWER_DOWN=0 -DERRATA_SPECULATIVE_AT=0 -DERROR_DEPRECATED=0 -DFAULT_INJECTION_SUPPORT=0 -DFEATURE_DETECTION=0 -DFEAT_PABANDON=0 -DFFH_SUPPORT=0 -DGICV2_G0_FOR_EL3=0 -DHANDLE_EA_EL3_FIRST_NS=0 -DHOB_LIST=0 -DHW_ASSISTED_COHERENCY=0 -DIMPDEF_SYSREG_TRAP=0 -DINIT_UNUSED_NS_EL2=0 -DLFA_SUPPORT=0 -DLOG_LEVEL=20 -DMEASURED_BOOT=0 -DNR_OF_FW_BANKS=2 -DNR_OF_IMAGES_IN_FW_BANK=1 -DNS_TIMER_SWITCH=0 -DPL011_GENERIC_UART=0 -DPLATFORM_REPORT_CTX_MEM_USE=0 -DPLAT_mt7988 -DPRESERVE_DSU_PMU_REGS=0 -DPROGRAMMABLE_RESET_ADDRESS=1 -DPSA_CRYPTO=0 -DPSA_FWU_METADATA_FW_STORE_DESC=0 -DPSA_FWU_SUPPORT=0 -DPSCI_EXTENDED_STATE_ID=0 -DPSCI_OS_INIT_MODE=0 -DRAS_TRAP_NS_ERR_REC_ACCESS=0 -DRECLAIM_INIT_CODE=0 -DRESET_TO_BL2=1 -DRESET_TO_BL31=0 -DRME_GPT_BITLOCK_BLOCK=1 -DRME_GPT_MAX_BLOCK=512 -DRMMD_ENABLE_EL3_TOKEN_SIGN=0 -DRMMD_ENABLE_IDE_KEY_PROG=0 -DSDEI_IN_FCONF=0 -DSEC_INT_DESC_IN_FCONF=0 -DSEPARATE_BL2_NOLOAD_REGION=0 -DSEPARATE_CODE_AND_RODATA=0 -DSEPARATE_NOBITS_REGION=0 -DSEPARATE_RWDATA_REGION=0 -DSEPARATE_SIMD_SECTION=0 -DSPD_none -DSPIN_ON_BL1_EXIT=0 -DSPMC_AT_EL3=0 -DSPMC_AT_EL3_SEL0_SP=0 -DSPMD_SPM_AT_SEL2=1 -DSPM_MM=0 -DSVE_VECTOR_LEN=2048 -DTRANSFER_LIST=0 -DTRNG_SUPPORT=0 -DTRUSTED_BOARD_BOOT=0 -DTWED_DELAY=0 -DUSE_COHERENT_MEM=1 -DUSE_DEBUGFS=0 -DUSE_ROMLIB=0 -DUSE_SP804_TIMER=0 -DUSE_SPINLOCK_CAS=0 -DUSE_TBBR_DEFS=1 -DWARMBOOT_ENABLE_DCACHE_EARLY=0 -Iinclude -Iinclude/arch/aarch64 -Iinclude/lib/cpus/aarch64 -Iinclude/lib/el3_runtime/aarch64 -Iinclude/plat/arm/common -Iinclude/plat/arm/common/aarch64 -Iplat/mediatek/apsoc_common -Iplat/mediatek/apsoc_common/drivers/uart -Iplat/mediatek/apsoc_common/drivers/trng/v2 -Iplat/mediatek/apsoc_common/drivers/wdt -Iplat/mediatek/mt7988/drivers/dram -Iplat/mediatek/mt7988/drivers/pll -Iplat/mediatek/mt7988/drivers/spmc -Iplat/mediatek/mt7988/drivers/timer -Iplat/mediatek/mt7988/drivers/devapc -Iplat/mediatek/mt7988/include -Iplat/mediatek/mt7988/drivers/dram -Iplat/mediatek/apsoc_common/bl2/include -Iplat/mediatek/apsoc_common/drivers/efuse -Iplat/mediatek/apsoc_common/drivers/efuse/include -Iplat/mediatek/mt7988/drivers/efuse -Iplat/mediatek/apsoc_common/img_dec/include -Iplat/mediatek/apsoc_common/img_dec/roe  -Iinclude/lib/libfdt -Iinclude/lib/xz -Iinclude/lib/libc -Iinclude/lib/libc/aarch64   -nostdinc -Werror -Wall -Wmissing-include-dirs -Wunused -Wdisabled-optimization -Wvla -Wshadow -Wredundant-decls -Wextra -Wno-trigraphs -Wno-missing-field-initializers -Wno-type-limits -Wno-sign-compare  -Wno-unused-parameter -Wunused-but-set-variable -Wmaybe-uninitialized -Wpacked-bitfield-compat -Wshift-overflow=2 -Wlogical-op -DOPTEE_TZRAM_SIZE=0x10000 -Wno-error=deprecated-declarations -Wno-error=cpp -mgeneral-regs-only -mstrict-align -ffunction-sections -fdata-sections -ffreestanding -fno-common -Os -std=gnu99 -DXZ_DEC_SINGLE -march=armv8-a -fno-stack-protector  -DDTB_PATH=\"/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/fdts/mt7988-spi0.dtb\" -Iplat/mediatek/apsoc_common/drivers/spi -Iplat/mediatek/mt7988/drivers/gpio -Iplat/mediatek/mt7988/drivers/spi -DDRAM_USE_COMB -DBL2_BASE=0x201000 -Iplat/mediatek/apsoc_common/bl2 -Iinclude/lib/libfdt -Iplat/mediatek/apsoc_common/drivers/spi_nand -DMTK_PLAT_KEY -DIMAGE_AT_EL3 -DIMAGE_BL2    -Wp,-MD,/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/bl2/spi_mem.d -MT /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/bl2/spi_mem.o -MP -c drivers/mtd/spi-mem/spi_mem.c -o /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/arm-trusted-firmware-mediatek-mt7988-spim-nand-comb/arm-trusted-firmware-mediatek-2025-07-11-78a0dfd9/build/mt7988/release/bl2/spi_mem.o
+--- ④ DTC / 设备树编译错误（DTC 用 'Error:' 大写，易被漏抓）---
+139723:ModuleNotFoundError: No module named '_testcapi'
+139736:ModuleNotFoundError: No module named '_testcapi'
+139749:ModuleNotFoundError: No module named '_testcapi'
+139762:ModuleNotFoundError: No module named '_testcapi'
+139775:ModuleNotFoundError: No module named '_testcapi'
+139788:ModuleNotFoundError: No module named '_testcapi'
+--- ⑤ 末尾 100 行 ---
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.motorola-bin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.uimage_sgehdr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.ext3.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfwimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.dc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.sign_dlink_ru.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.trx2edips.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lzma.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.nand_ecc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cfdisk.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.m4.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkwrggimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.xz.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.nec-enc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.wrt400n.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfs.fat.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.add_header.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.b43-fwcutter.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.pfunct.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.fat.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfs.ext4.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2fsck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zycast.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.avm-wasp-checksum.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.unsquashfs4.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ocspcheck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkh3cvfs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.srec2bin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkcsysimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkbrnimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkqdimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cpack.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.trx2usr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.linksys-addfwhdr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkplanexfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mklibs-readelf.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.flock.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.encode_crc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdapimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zyimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.flex.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bcm4908asus.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lzmainfo.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.sfdisk.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fix-u-media-header.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lsattr.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkporayfw.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fdisk.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.xargs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.dgn3500sum.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.sed.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bcmblob.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfs.ext3.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.asusuimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ptgen.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.cmake.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkrasimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkchkimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e4defrag.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bison.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.addpattern.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.usign.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkmerakifw-old.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.fsck.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkdhpimg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.e2image.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.badblocks.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.make_ext4fs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkheader_gemtek.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkfwimage2.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mklost+found.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.tune2fs.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.imagetag.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.seama.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.xmlwf.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.zytrx.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.bc.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mktplinkfw2.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.faked.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkedimaximg.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.mkimage.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.tar.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.patch.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.makeamitbin.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.spw303v.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.find.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.logsave.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.jshn.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.codiff.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.libdeflate-gzip.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.ctracer.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.dns313-header.bin: executable
+rstrip.sh: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64/staging_dir/host/bin/.lxlfw.bin: executable
+(cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/target-aarch64_cortex-a53_musl; \
+	tar -I '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/xz -7e -T0' -cf /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/bin/targets/mediatek/filogic/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64.tar.xz openwrt-imagebuilder-mediatek-filogic.Linux-x86_64 \
+	--mtime="Sat Oct 31 08:12:01 UTC 2026"; \
+)
+make[2]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/target/imagebuilder'
+time: target/imagebuilder/compile#461.64#9.97#135.19
+make[1]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt'
