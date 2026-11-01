@@ -512,6 +512,8 @@ jobs:
             echo "uboot-mediatek Makefile 不存在，跳过"
           fi
 
+      # run21 触发：wmz-lede-multisize 已推 95740ee6（删 supergateway-s20-common.dtsi 多余的 /dts-v1/;，修 run20 filogic S20 dtb 全挂）。
+      # 本提交本身不改构建逻辑，仅重跑 CI 从 95740ee6 重建四平台 IB（含 S20）。
       - name: Enable 6.18 kconfig for ntfs3 (ALL_KMODS 雪崩修复)
         # run18 实锤：切到 6.18 后 CONFIG_ALL_KMODS=y 拉来的 kmod 在 6.18 下雪崩：
         #  - 旧 NTFS_FS 在 6.18 已彻底移除 → kmod-fs-ntfs 物理无 ntfs.ko → 打包失败
