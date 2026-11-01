@@ -603,6 +603,14 @@ jobs:
             #   is missing" → 打包失败 → 整盘雪崩。6.18 改由 kmod-fs-ntfs3（NTFS3_FS=m）提供
             #   NTFS 读支持，故显式把旧 kmod-fs-ntfs 关掉，避免 ALL_KMODS 再扫它。
             echo "CONFIG_PACKAGE_kmod-fs-ntfs=N"
+            # ⚠️ 2026-11-02 run21(41340994353) 实锤：kmod-ice（Intel E810 万兆网卡驱动 ice.ko）
+            #   在 6.18.60 上编译失败 → kmod-ice ipk Error 1 → package/kernel/linux/compile 失败
+            #   → package/install 失败 → target/linux/install 连带失败（image-mt7986a-supergateway-s20*.dtb
+            #   的 Error 1 只是下游连带，非设备树本身问题；S20 的 /dts-v1/; 重复已在 lede 源树
+            #   95740ee6 修复）。ice 是 Intel 服务器网卡驱动，路由器平台（mediatek/qualcomm/rockchip）
+            #   用不到，且四个平台均被强制升到 6.18，故显式 =N 单独剔除（不影响其他 ~984 个 kmod）。
+            #   若后续需要 E810 支持，应给 ice 打 6.18 适配补丁再移除本行。
+            echo "CONFIG_PACKAGE_kmod-ice=N"
             # ⚠️⚠️ KERNEL_WERROR 必须关（2026-10-20 run 39371381477 实锤）：
             #   ALL_KMODS 会把 kiddin9 feed 里的 vendored 内核包也扫进来编译，例如
             #   quectel_MHI（pcie_mhi-1.3.8）在 6.12.108 上：
@@ -1307,10 +1315,22 @@ jobs:
               DTCSRC="target/linux/mediatek/dts"
               DTCSRC_K=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.18*/arch/arm64/boot/dts 2>/dev/null | head -1)
               if [ -x "$DTCDIR/dtc" ] && [ -d "$DTCSRC" ]; then
+                # ⚠️ 必须用 cpp 预处理 .dts 再 dtc：直接 dtc -I dts 会把 #include 当语法错误
+                #   误报 "s20*.dts:4.1-9 syntax error"（run20/21 的假错根源）。OpenWrt 构建系统
+                #   本身也是 cpp 预处理后再 dtc，此处复刻同样的预处理链路。
+                CPP=$(ls staging_dir/host/bin/gcc 2>/dev/null || command -v gcc 2>/dev/null || true)
                 for d in mt7986a-supergateway-s20l mt7986a-supergateway-s20m mt7986a-supergateway-s20p; do
-                  echo "=== dtc 重编 $d ==="
-                  "$DTCDIR/dtc" -I dts -O dtb -i "$DTCSRC" -i "$KDIR/include" ${DTCSRC_K:+-i "$DTCSRC_K"} \
-                    "$DTCSRC/$d.dts" -o /tmp/$d.dtb 2>&1 | head -40 || true
+                  echo "=== cpp+dtc 重编 $d ==="
+                  if [ -n "$CPP" ]; then
+                    "$CPP" -E -P -x assembler-with-cpp -I"$KDIR/include" -I"$DTCSRC" ${DTCSRC_K:+-I"$DTCSRC_K"} \
+                      "$DTCSRC/$d.dts" -o /tmp/$d.pre.dts 2>/tmp/$d.cpp.err || { echo "(cpp 预处理失败，附错误:)"; head -20 /tmp/$d.cpp.err; }
+                    "$DTCDIR/dtc" -I dts -O dtb -i "$DTCSRC" -i "$KDIR/include" ${DTCSRC_K:+-i "$DTCSRC_K"} \
+                      /tmp/$d.pre.dts -o /tmp/$d.dtb 2>&1 | head -40 || true
+                  else
+                    echo "(无 cpp，直接 dtc 可能误报 #include，仅供参考)"
+                    "$DTCDIR/dtc" -I dts -O dtb -i "$DTCSRC" -i "$KDIR/include" ${DTCSRC_K:+-i "$DTCSRC_K"} \
+                      "$DTCSRC/$d.dts" -o /tmp/$d.dtb 2>&1 | head -40 || true
+                  fi
                 done
               else
                 echo "(内核 dtc 或 OpenWrt dts 源目录不可用 → 回退 build.log 抓取 supergateway-s20)"
