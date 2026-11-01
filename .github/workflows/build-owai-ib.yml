@@ -512,20 +512,20 @@ jobs:
             echo "uboot-mediatek Makefile 不存在，跳过"
           fi
 
-      - name: Enable 6.18 kconfig for rpcsec(krb5) + ntfs3 (ALL_KMODS 雪崩修复)
+      - name: Enable 6.18 kconfig for ntfs3 (ALL_KMODS 雪崩修复)
         # run18 实锤：切到 6.18 后 CONFIG_ALL_KMODS=y 拉来的 kmod 在 6.18 下雪崩：
         #  - 旧 NTFS_FS 在 6.18 已彻底移除 → kmod-fs-ntfs 物理无 ntfs.ko → 打包失败
-        #    （改用 NTFS3_FS=m，由 kmod-fs-ntfs3 提供 NTFS 读支持）
-        #  - RPCSEC_GSS_KRB5 6.18 默认未开 → krb5.ko 不编出 →
-        #    kmod-fs-nfs-common-rpcsec 打包失败（缺 krb5.ko）
-        # 这两个符号对所有 6.18 平台共享（generic config-6.18）。
+        #    （改用 NTFS3_FS=m，由 kmod-fs-ntfs3 提供 NTFS 读支持；源树 config-6.18
+        #     已由 ed38566d3 设为 CONFIG_NTFS3_FS=m，此处 sed 作为兜底幂等重设）
+        #  - RPCSEC_GSS_KRB5 6.18 依赖链脆弱，已在源树 fs.mk 由 ed38566d3 把
+        #    kmod-fs-nfs-common-rpcsec 在 6.18 上 DEPENDS+=@!LINUX_6_18 排除，
+        #    **不再强制注入**内核 config（否则内核构建本身会去编脆弱模块→整棵 IB 挂）。
         working-directory: openwrt
         run: |
           C=target/linux/generic/config-6.18
           if [ -f "$C" ]; then
             sed -i 's/# CONFIG_NTFS3_FS is not set/CONFIG_NTFS3_FS=m/' "$C"
-            grep -q '^CONFIG_RPCSEC_GSS_KRB5=' "$C" || echo 'CONFIG_RPCSEC_GSS_KRB5=m' >> "$C"
-            echo "NTFS3=$(grep -E '^CONFIG_NTFS3_FS' "$C")  RPCSEC=$(grep -E '^CONFIG_RPCSEC_GSS_KRB5' "$C")"
+            echo "NTFS3=$(grep -E '^CONFIG_NTFS3_FS' "$C")"
           else
             echo "$C 不存在，跳过"
           fi
@@ -1297,17 +1297,21 @@ jobs:
               echo "--- ④ DTC / 设备树编译错误（DTC 用 'Error:' 大写，易被漏抓）---"
               grep -nE "Error: |dtc: |DTC: |Reference to non-existent|invalid type|syntax error" /tmp/build.log | head -80
               echo "--- ④b S20 设备树确定性重编译（用内核自带 dtc 单独重编，绕开并行构建吞噬 DTC 真错）---"
+              # ⚠️ OpenWrt 目标 dts 在 **源树** target/linux/mediatek/dts/，
+              #    不在内核树 arch/arm64/boot/dts/mediatek（那只有内核自带 dts）。
+              #    之前 DTCSRC 指向内核树 → 永远找不到 s20*.dts → 形同虚设。
               KDIR=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.18* 2>/dev/null | head -1)
               DTCDIR="$KDIR/scripts/dtc"
-              DTCSRC=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.18*/arch/arm64/boot/dts/mediatek 2>/dev/null | head -1)
-              if [ -x "$DTCDIR/dtc" ] && [ -n "$DTCSRC" ]; then
+              DTCSRC="target/linux/mediatek/dts"
+              DTCSRC_K=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.18*/arch/arm64/boot/dts 2>/dev/null | head -1)
+              if [ -x "$DTCDIR/dtc" ] && [ -d "$DTCSRC" ]; then
                 for d in mt7986a-supergateway-s20l mt7986a-supergateway-s20m mt7986a-supergateway-s20p; do
                   echo "=== dtc 重编 $d ==="
-                  "$DTCDIR/dtc" -I dts -O dtb -i "$DTCSRC" -i "$KDIR/include" \
+                  "$DTCDIR/dtc" -I dts -O dtb -i "$DTCSRC" -i "$KDIR/include" ${DTCSRC_K:+-i "$DTCSRC_K"} \
                     "$DTCSRC/$d.dts" -o /tmp/$d.dtb 2>&1 | head -40 || true
                 done
               else
-                echo "(内核 dtc 或 dts 源目录不可用 → 回退 build.log 抓取 supergateway-s20)"
+                echo "(内核 dtc 或 OpenWrt dts 源目录不可用 → 回退 build.log 抓取 supergateway-s20)"
                 grep -nE "supergateway-s20|Error: |dtc: |FATAL ERROR|Reference to non-existent|duplicate (label|node)|syntax error" /tmp/build.log | head -60 || true
               fi
               echo "--- ⑤ 末尾 100 行 ---"
