@@ -512,10 +512,35 @@ jobs:
             echo "uboot-mediatek Makefile 不存在，跳过"
           fi
 
+      - name: Enable 6.18 kconfig for rpcsec(krb5) + ntfs3 (ALL_KMODS 雪崩修复)
+        # run18 实锤：切到 6.18 后 CONFIG_ALL_KMODS=y 拉来的 kmod 在 6.18 下雪崩：
+        #  - 旧 NTFS_FS 在 6.18 已彻底移除 → kmod-fs-ntfs 物理无 ntfs.ko → 打包失败
+        #    （改用 NTFS3_FS=m，由 kmod-fs-ntfs3 提供 NTFS 读支持）
+        #  - RPCSEC_GSS_KRB5 6.18 默认未开 → krb5.ko 不编出 →
+        #    kmod-fs-nfs-common-rpcsec 打包失败（缺 krb5.ko）
+        # 这两个符号对所有 6.18 平台共享（generic config-6.18）。
+        working-directory: openwrt
+        run: |
+          C=target/linux/generic/config-6.18
+          if [ -f "$C" ]; then
+            sed -i 's/# CONFIG_NTFS3_FS is not set/CONFIG_NTFS3_FS=m/' "$C"
+            grep -q '^CONFIG_RPCSEC_GSS_KRB5=' "$C" || echo 'CONFIG_RPCSEC_GSS_KRB5=m' >> "$C"
+            echo "NTFS3=$(grep -E '^CONFIG_NTFS3_FS' "$C")  RPCSEC=$(grep -E '^CONFIG_RPCSEC_GSS_KRB5' "$C")"
+          else
+            echo "$C 不存在，跳过"
+          fi
+
       - name: Update and install feeds
         working-directory: openwrt
         run: |
           ./scripts/feeds update -a
+          # 6.18 不兼容的 feed kmod：rkp-ipid / quectel_MHI / libpfring 在 6.18 内核 API 下编译失败
+          # （rkp-ipid.c 'VERSION' undeclared / mhi_netdev_quectel.c hrtimer_init 隐式声明 /
+          #  pf_ring.o 6.18 API 错误）。在 install 之前删除其源码目录，使其不被选中，
+          #  避免 CONFIG_ALL_KMODS=y 把它们拉进来雪崩。
+          for d in $(find feeds -type d \( -name rkp-ipid -o -name quectel_MHI -o -name libpfring \)); do
+            echo "rm feed: $d"; rm -rf "$d"
+          done
           # 注意：刻意不用 Kwrt 的 `install -a -p kiddin9 -f` ——
           # op-packages 根目录带 luci-base/luci-mod-*/luci-nginx 等 core 组件，
           # 一把梭会把整棵 LuCI 换掉。这里只做普通全装。
@@ -571,6 +596,11 @@ jobs:
             #   IB 缺 kmod → assembler §4 静默剔包，见上方 ALL_KMODS 注释）。若后续需要
             #   nat46 可回头给它打 6.12 适配补丁，再移除本行。
             echo "CONFIG_PACKAGE_kmod-nat46=N"
+            # ⚠️ 2026-10-31 run18 实锤（切 6.18 后）：旧 NTFS_FS 在 6.18 内核已彻底移除，
+            #   kmod-fs-ntfs 物理无 ntfs.ko → ALL_KMODS 拉它编 → "module '.../fs/ntfs/ntfs.ko'
+            #   is missing" → 打包失败 → 整盘雪崩。6.18 改由 kmod-fs-ntfs3（NTFS3_FS=m）提供
+            #   NTFS 读支持，故显式把旧 kmod-fs-ntfs 关掉，避免 ALL_KMODS 再扫它。
+            echo "CONFIG_PACKAGE_kmod-fs-ntfs=N"
             # ⚠️⚠️ KERNEL_WERROR 必须关（2026-10-20 run 39371381477 实锤）：
             #   ALL_KMODS 会把 kiddin9 feed 里的 vendored 内核包也扫进来编译，例如
             #   quectel_MHI（pcie_mhi-1.3.8）在 6.12.108 上：
@@ -1266,6 +1296,20 @@ jobs:
               grep -n -A8 "missing dependencies for the following libraries:" /tmp/build.log | head -40
               echo "--- ④ DTC / 设备树编译错误（DTC 用 'Error:' 大写，易被漏抓）---"
               grep -nE "Error: |dtc: |DTC: |Reference to non-existent|invalid type|syntax error" /tmp/build.log | head -80
+              echo "--- ④b S20 设备树确定性重编译（用内核自带 dtc 单独重编，绕开并行构建吞噬 DTC 真错）---"
+              KDIR=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.18* 2>/dev/null | head -1)
+              DTCDIR="$KDIR/scripts/dtc"
+              DTCSRC=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.18*/arch/arm64/boot/dts/mediatek 2>/dev/null | head -1)
+              if [ -x "$DTCDIR/dtc" ] && [ -n "$DTCSRC" ]; then
+                for d in mt7986a-supergateway-s20l mt7986a-supergateway-s20m mt7986a-supergateway-s20p; do
+                  echo "=== dtc 重编 $d ==="
+                  "$DTCDIR/dtc" -I dts -O dtb -i "$DTCSRC" -i "$KDIR/include" \
+                    "$DTCSRC/$d.dts" -o /tmp/$d.dtb 2>&1 | head -40 || true
+                done
+              else
+                echo "(内核 dtc 或 dts 源目录不可用 → 回退 build.log 抓取 supergateway-s20)"
+                grep -nE "supergateway-s20|Error: |dtc: |FATAL ERROR|Reference to non-existent|duplicate (label|node)|syntax error" /tmp/build.log | head -60 || true
+              fi
               echo "--- ⑤ 末尾 100 行 ---"
               tail -100 /tmp/build.log
             else
