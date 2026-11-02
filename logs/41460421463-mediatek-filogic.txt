@@ -1,0 +1,292 @@
+run=41460421463 attempt=1 target=mediatek/filogic
+job_status=cancelled
+--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，
+    而非编译失败。常见三因：① 超 timeout-minutes(330m) ② 6h runner 硬上限
+    ③ concurrency cancel-in-progress（同一分支新推送抢跑）
+    ④ GitHub Free 私有仓月度配额(2000min)耗尽 → job 排队未启动（日志会是空的）
+--- .config 关键项 ---
+CONFIG_TARGET_ROOTFS_INITRAMFS=y
+CONFIG_TARGET_ROOTFS_INITRAMFS_SEPARATE=y
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+CONFIG_TARGET_ROOTFS_DIR=""
+CONFIG_IB=y
+CONFIG_IB_STANDALONE=y
+CONFIG_PACKAGE_libip4tc=m
+CONFIG_PACKAGE_libip6tc=m
+CONFIG_PACKAGE_libiptext=m
+CONFIG_PACKAGE_libiptext6=m
+CONFIG_PACKAGE_libxtables=m
+CONFIG_PACKAGE_curl=m
+CONFIG_PACKAGE_ip6tables-nft=m
+CONFIG_PACKAGE_ip6tables-zz-legacy=m
+CONFIG_PACKAGE_iptables-nft=m
+CONFIG_PACKAGE_iptables-zz-legacy=m
+CONFIG_PACKAGE_xtables-legacy=m
+CONFIG_PACKAGE_xtables-nft=m
+--- 内核镜像数（后缀随 KERNEL_SUFFIX 变；预期 > 0；target/linux/install 产出）---
+0
+--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---
+--- bin/packages 关键包（core 仓库那批）---
+--- filogic bootloader config 符号（mt7981 =y 行数 + jcg 样本）---
+76
+CONFIG_PACKAGE_u-boot-mt7981_jcg_q30-pro=y
+CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=y
+--- IB 内 FIP/bl2 清单 + jcg 精确判定（诊断 FIP 门禁的根因现场）---
+(未找到 IB tar.zst)
+--- Build 步 make 实际报错（2026-10-31 二次修：run55 尾部80行只有 perl 收尾+Error 2，
+    并行 make 下真凶在日志中部。改为：① 所有 make[?]*** 失败目标行 ② 首个失败目标
+    前后上下文 ③ 常见错误模式行 ④ 尾部100行）---
+build.log 行数 = 72026
+--- ① 全部 make 失败目标行（\*\*\*）---
+17214:make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+17222:make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+38126:make[4]: *** [Makefile:3603: uninstall] Error 1
+38128:make[3]: *** [Makefile:2300: uninstall-recursive] Error 1
+--- ② 首个失败目标上下文（前 40 行 + 后 10 行）---
+[ ! -d ./src/ ] || cp -fpR ./src/* /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/libtool/patches/000-relocatable.patch using plaintext: 
+patching file libtoolize.in
+patching file m4/libtool.m4
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/libtool/patches/001-always-install-aux.patch using plaintext: 
+patching file libtoolize.in
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/libtool/patches/100-libdir-fixes.patch using plaintext: 
+patching file build-aux/ltmain.in
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/libtool/patches/110-dont-use-target-dir-for-relinking.patch using plaintext: 
+/usr/bin/env bash ../libtool  --tag=CC   --mode=compile /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/gcc -DPACKAGE_NAME=\"libressl\" -DPACKAGE_TARNAME=\"libressl\" -DPACKAGE_VERSION=\"4.2.1\" -DPACKAGE_STRING=\"libressl\ 4.2.1\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DPACKAGE=\"libressl\" -DVERSION=\"4.2.1\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DSIZEOF_TIME_T=8 -DHAVE_SYMLINK=1 -DHAVE_ENDIAN_H=1 -DHAVE_ERR_H=1 -DHAVE_NETINET_IP_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_NETINET_IN_H=1 -DHAVE_ARPA_NAMESER_H=1 -DHAVE_NETDB_H=1 -DHAVE_RESOLV_H=1 -DHAVE_ASPRINTF=1 -DHAVE_FTRUNCATE=1 -DHAVE_GETDELIM=1 -DHAVE_GETLINE=1 -DHAVE_MEMMEM=1 -DHAVE_REALLOCARRAY=1 -DHAVE_STRCASECMP=1 -DHAVE_STRNDUP=1 -DHAVE_STRNLEN=1 -DHAVE_STRSEP=1 -DHAVE_TIMEGM=1 -DHAVE_GETOPT=1 -DHAVE_SYSLOG=1 -DHAVE_ACCEPT4=1 -DHAVE_PIPE2=1 -DHAVE_POLL=1 -DHAVE_SOCKETPAIR=1 -DHAVE_EXPLICIT_BZERO=1 -DHAVE_GETAUXVAL=1 -DHAVE_GETAUXVAL=1 -DHAVE_DL_ITERATE_PHDR=1 -DHAVE_CLOCK_GETTIME=1 -DHAVE_VA_COPY=1 -DHAVE___VA_COPY=1 -DHAS_GNU_WARNING_LONG=1 -I.  -I../crypto/hidden -I../include -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libressl-4.2.1/include -I../include/compat -DLIBRESSL_INTERNAL -D__BEGIN_HIDDEN_DECLS= -D__END_HIDDEN_DECLS= -DLIBRESSL_CRYPTO_INTERNAL -I../crypto/aes -I../crypto/asn1 -I../crypto/bio -I../crypto/bn -I../crypto/bytestring -I../crypto/conf -I../crypto/curve25519 -I../crypto/dh -I../crypto/dsa -I../crypto/ec -I../crypto/ecdh -I../crypto/ecdsa -I../crypto/err -I../crypto/evp -I../crypto/hmac -I../crypto/lhash -I../crypto/mlkem -I../crypto/modes -I../crypto/ocsp -I../crypto/pkcs12 -I../crypto/rsa -I../crypto/sha -I../crypto/stack -I../crypto/x509 -I../crypto -DLIBRESSL_INTERNAL -DOPENSSL_NO_HW_PADLOCK  -DOPENSSLDIR=\"/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/etc/ssl\"       -DOPENSSL_NO_ASM           -I../crypto/arch/amd64/ -I../crypto/bn/arch/amd64/ -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_POSIX_SOURCE -D_GNU_SOURCE  -O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include -DPIC -fPIC -Wall -std=gnu99 -fno-strict-aliasing  -fno-strict-overflow -fstack-protector-strong -fcf-protection=full -DHAVE_GNU_STACK  -Wno-pointer-sign -c -o asn1/libcrypto_la-a_time_tm.lo `test -f 'asn1/a_time_tm.c' || echo './'`asn1/a_time_tm.c
+. /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/include/shell.sh; /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libdeflate-gzip -dc /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/dl/dosfstools-4.2.tar.gz | tar -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2/.. -xf -
+patching file build-aux/ltmain.in
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/libtool/patches/120-strip-unsafe-dirs-for-relinking.patch using plaintext: 
+patching file build-aux/ltmain.in
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/libtool/patches/140-don-t-quote-SHELL-in-Makefile.am.patch using plaintext: 
+patching file Makefile.am
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/libtool/patches/200-openwrt-branding.patch using plaintext: 
+patching file build-aux/ltmain.in
+[ ! -d ./src/ ] || cp -fpR ./src/* /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2
+patching file build-aux/funclib.sh
+CFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include" CPPFLAGS="-I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include" CXXFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include" LDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib" make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/. am__CONFIG_DISTCLEAN_FILES= CONFIG_STATUS_DEPENDENCIES= uninstall
+make[3]: Entering directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/dosfstools/patches/100-source-date-epoch.patch using plaintext: 
+patching file src/boot.c
+patching file src/common.c
+patching file src/mkfs.fat.c
+
+Applying /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/tools/dosfstools/patches/101-config-switch-to-AC_CHECK_LIB.patch using plaintext: 
+patching file configure.ac
+touch /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2/.prepared24297dfdc81222daa71546bb8a5a5436_6664517399ebbbc92a37c5bb081b5c53
+There seems to be no Makefile in this directory.
+You must run ./configure before running 'make'.
+make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+make[3]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+make[2]: [Makefile:76: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/.prepared27be20c7b61a1ba571eaa22f4b066299_6664517399ebbbc92a37c5bb081b5c53] Error 2 (ignored)
+CFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include" CPPFLAGS="-I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include" CXXFLAGS="-O2 -I/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include" LDFLAGS="-L/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/lib" make --jobserver-auth=3,4  -C /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/. am__CONFIG_DISTCLEAN_FILES= CONFIG_STATUS_DEPENDENCIES= maintainer-clean # Clean bootstrap files from the release
+(cd /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/dosfstools-4.2; rm -f aclocal.m4; if [ -f ./configure.ac ] || [ -f ./configure.in ]; then [ -d ./autom4te.cache ] && rm -rf ./autom4te.cache; [ -e ./config.rpath ] || ln -s /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/scripts/config.rpath ./config.rpath; touch NEWS AUTHORS COPYING ABOUT-NLS ChangeLog; AUTOM4TE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autom4te AUTOCONF=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoconf AUTOMAKE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/automake ACLOCAL=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/aclocal AUTOHEADER=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoheader LIBTOOLIZE=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtoolize LIBTOOL=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtool M4=/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/m4 AUTOPOINT=true GTKDOCIZE=true LIBTOOLIZE='/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/libtoolize --install' /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/bin/autoreconf -v -f -i -B /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/share/aclocal -I m4 -I . . || true; fi; );
+make[3]: Entering directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+There seems to be no Makefile in this directory.
+You must run ./configure before running 'make'.
+make[3]: *** [GNUmakefile:108: abort-due-to-no-makefile] Error 1
+make[3]: Leaving directory '/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4'
+make[2]: [Makefile:77: /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/libtool-2.5.4/.prepared27be20c7b61a1ba571eaa22f4b066299_6664517399ebbbc92a37c5bb081b5c53] Error 2 (ignored)
+--- ②b 真凶上下文（围绕 OpenWrt 汇总行 'ERROR: package/X failed to build' 的 80 行前 + 20 行后）---
+(无 'ERROR: package/X failed to build' 行 → 失败非包编译类，见 ①/③/④)
+--- ③ 常见错误模式行（error/ERROR/Error/undefined/No rule/missing/DTC）---
+450:configure: WARNING: libattr development library was not found or not usable.
+3792:configure: WARNING: libattr development library was not found or not usable.
+8287:warning: A compatible version of re2c (>= 0.15.3) was not found; changes to src/*.in.cc will not affect your build.
+16077:curl: (22) The requested URL returned error: 403
+16160:curl: (22) The requested URL returned error: 404
+25785:checking for BSD- or MS-compatible name lister (nm)... ./configure: line 12618: 1q: command not found
+25786:./configure: line 12624: 1q: command not found
+25787:./configure: line 12618: 1q: command not found
+25789:checking for sigaltstack... ./configure: line 12624: 1q: command not found
+25790:./configure: line 12618: 1q: command not found
+25791:./configure: line 12624: 1q: command not found
+25794:checking for siginterrupt... ./configure: line 12802: External.*some_variable: command not found
+33828:checking for mbsrtowcs... -- Looking for environ - not found
+35773:-- Looking for connect in socket - not found
+35796:checking whether the C++ compiler has <uchar.h>... ./configure: line 29575: top_srcdir: command not found
+35797:-- Looking for OPENSSL_IS_AWSLC - not found
+35814:checking for an english Unicode locale... -- Looking for SSL_set0_wbio - not found
+35822:checking for a transitional chinese locale... -- Looking for SSL_CTX_set_srp_username - not found
+35834:-- Looking for sys/filio.h - not found
+35877:-- Looking for sys/sockio.h - not found
+35889:-- Looking for 5 include files sys/socket.h, ..., sys/utime.h - not found
+35921:-- Looking for io.h - not found
+35945:-- Looking for netinet/in6.h - not found
+35978:checking whether alarm is declared... -- Looking for stropts.h - not found
+36166:-- Looking for closesocket - not found
+36175:checking whether locale.h conforms to POSIX:2001... -- Looking for getpass_r - not found
+36279:checking whether printf supports the 'B' directive... -- Looking for stricmp - not found
+36282:-- Looking for strcmpi - not found
+36446:./configure: line 49532: top_srcdir: command not found
+36504:checking whether dup works... -- Looking for 3 include files sys/types.h, ..., copyfile.h - not found
+36507:-- Looking for 3 include files sys/types.h, ..., direct.h - not found
+36524:-- Looking for 5 include files sys/types.h, ..., ext2fs/ext2_fs.h - not found
+36616:checking how to run the C preprocessor... -- Looking for 15 include files sys/types.h, ..., membership.h - not found
+36643:checking whether compiler handles -Wunused-variable... -- Looking for 18 include files sys/types.h, ..., process.h - not found
+36661:checking for stdlib.h... -- Looking for 20 include files sys/types.h, ..., readpassphrase.h - not found
+36705:-- Looking for 27 include files sys/types.h, ..., sys/acl.h - not found
+36715:-- Looking for 28 include files sys/types.h, ..., sys/extattr.h - not found
+36720:checking for iswblank... -- Looking for 29 include files sys/types.h, ..., sys/mkdev.h - not found
+36726:checking whether iswblank is declared... -- Looking for 29 include files sys/types.h, ..., sys/mount.h - not found
+36730:checking whether iswdigit is ISO C compliant... -- Looking for 31 include files sys/types.h, ..., sys/richacl.h - not found
+36844:checking whether open recognizes a trailing slash... -- Looking for 46 include files sys/types.h, ..., windows.h - not found
+36848:-- Looking for 46 include files sys/types.h, ..., wincrypt.h - not found
+36853:-- Looking for 46 include files sys/types.h, ..., winioctl.h - not found
+36918:-- Looking for arc4random_buf - not found
+37508:-- Looking for getvfsbyname - not found
+37529:-- Looking for issetugid - not found
+37558:-- Looking for lchflags - not found
+37875:-- Looking for readpassphrase - not found
+37927:-- Looking for strncpy_s - not found
+38368:-- Looking for _fseeki64 - not found
+38401:-- Looking for _get_timezone - not found
+38415:-- Looking for ctime_s - not found
+38428:-- Looking for gmtime_s - not found
+38458:-- Looking for localtime_s - not found
+38473:-- Looking for _mkgmtime - not found
+38493:-- Looking for cygwin_conv_path - not found
+38748:-- Looking for EFTYPE - not found
+38785:-- Looking for D_MD_ORDER - not found
+39366:-- Checking support for ARCHIVE_CRYPTO_MD5_LIBC -- not found
+39389:-- Checking support for ARCHIVE_CRYPTO_RMD160_LIBC -- not found
+39408:-- Checking support for ARCHIVE_CRYPTO_SHA1_LIBC -- not found
+39426:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC -- not found
+39438:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC -- not found
+39440:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC -- not found
+39442:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC2 -- not found
+39444:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC2 -- not found
+39449:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC2 -- not found
+39544:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBC3 -- not found
+39611:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBC3 -- not found
+39692:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBC3 -- not found
+39824:-- Checking support for ARCHIVE_CRYPTO_MD5_LIBSYSTEM -- not found
+40044:-- Checking support for ARCHIVE_CRYPTO_SHA1_LIBSYSTEM -- not found
+40106:-- Checking support for ARCHIVE_CRYPTO_SHA256_LIBSYSTEM -- not found
+40215:-- Checking support for ARCHIVE_CRYPTO_SHA384_LIBSYSTEM -- not found
+40340:-- Checking support for ARCHIVE_CRYPTO_SHA512_LIBSYSTEM -- not found
+47367:configure: WARNING: diffstat not found, some optional functionalities will be missing
+57749:-- Looking for valgrind/valgrind.h - not found
+57757:-- Looking for CrashReporterClient.h - not found
+57774:-- Looking for arc4random - not found
+57786:-- Looking for __unw_add_dynamic_fde - not found
+57806:-- Looking for mallctl - not found
+57812:-- Looking for malloc_zone_statistics - not found
+57822:-- Looking for strerror_s - not found
+57834:-- Looking for pthread_get_name_np - not found
+57836:-- Looking for pthread_set_name_np - not found
+57840:-- Looking for proc_pid_rusage - not found
+57914:-- Looking for os_signpost_interval_begin - not found
+--- ③b missing-dependencies 上下文（列出缺失的具体 .so）---
+--- ④ DTC / 设备树编译错误（DTC 用 'Error:' 大写，易被漏抓）---
+--- ④b S20 设备树确定性重编译（用内核自带 dtc 单独重编，绕开并行构建吞噬 DTC 真错）---
+(内核 dtc 或 OpenWrt dts 源目录不可用 → 回退 build.log 抓取 supergateway-s20)
+--- ⑤ 末尾 100 行 ---
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/APNumericStorage.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Decl.h:16,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Type.h:20,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/CanonicalType.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/ASTContext.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/Analysis/FlowSensitive/Models/UncheckedOptionalAccessModel.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/lib/Analysis/FlowSensitive/Models/UncheckedOptionalAccessModel.cpp:14:
+/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/endian.h:6:2: warning: #include_next is a GCC extension
+    6 | #include_next <endian.h>
+      |  ^~~~~~~~~~~~
+[3291/4294] Building CXX object tools/clang/lib/ExtractAPI/CMakeFiles/obj.clangExtractAPI.dir/API.cpp.o
+[3292/4294] Building CXX object tools/clang/lib/Analysis/FlowSensitive/Models/CMakeFiles/obj.clangAnalysisFlowSensitiveModels.dir/UncheckedStatusOrAccessModel.cpp.o
+In file included from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/endian.h:5,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/bit.h:34,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/Support/MathExtras.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APInt.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APFloat.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/APNumericStorage.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Decl.h:16,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Type.h:20,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/Analysis/FlowSensitive/Models/UncheckedStatusOrAccessModel.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/lib/Analysis/FlowSensitive/Models/UncheckedStatusOrAccessModel.cpp:9:
+/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/byteswap.h:2:2: warning: #include_next is a GCC extension
+    2 | #include_next <byteswap.h>
+      |  ^~~~~~~~~~~~
+In file included from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/bit.h:34,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/Support/MathExtras.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APInt.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APFloat.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/APNumericStorage.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Decl.h:16,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Type.h:20,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/Analysis/FlowSensitive/Models/UncheckedStatusOrAccessModel.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/lib/Analysis/FlowSensitive/Models/UncheckedStatusOrAccessModel.cpp:9:
+/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/endian.h:6:2: warning: #include_next is a GCC extension
+    6 | #include_next <endian.h>
+      |  ^~~~~~~~~~~~
+[3293/4294] Building CXX object tools/clang/lib/Frontend/Rewrite/CMakeFiles/obj.clangRewriteFrontend.dir/FixItRewriter.cpp.o
+[3294/4294] Building CXX object tools/clang/lib/ExtractAPI/CMakeFiles/obj.clangExtractAPI.dir/TypedefUnderlyingTypeResolver.cpp.o
+In file included from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/endian.h:5,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/bit.h:34,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/Support/MathExtras.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APInt.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APFloat.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/APNumericStorage.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Decl.h:16,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Type.h:20,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/CanonicalType.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/ASTContext.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/ExtractAPI/TypedefUnderlyingTypeResolver.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/lib/ExtractAPI/TypedefUnderlyingTypeResolver.cpp:14:
+/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/byteswap.h:2:2: warning: #include_next is a GCC extension
+    2 | #include_next <byteswap.h>
+      |  ^~~~~~~~~~~~
+In file included from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/bit.h:34,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/Support/MathExtras.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APInt.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APFloat.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/APNumericStorage.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Decl.h:16,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Type.h:20,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/CanonicalType.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/ASTContext.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/ExtractAPI/TypedefUnderlyingTypeResolver.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/lib/ExtractAPI/TypedefUnderlyingTypeResolver.cpp:14:
+/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/endian.h:6:2: warning: #include_next is a GCC extension
+    6 | #include_next <endian.h>
+      |  ^~~~~~~~~~~~
+[3295/4294] Building CXX object tools/clang/lib/ExtractAPI/CMakeFiles/obj.clangExtractAPI.dir/DeclarationFragments.cpp.o
+In file included from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/endian.h:5,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/bit.h:34,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/Support/MathExtras.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APInt.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APFloat.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/APNumericStorage.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Decl.h:16,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Type.h:20,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/CanonicalType.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/ASTContext.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/ExtractAPI/DeclarationFragments.h:21,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/lib/ExtractAPI/DeclarationFragments.cpp:14:
+/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/byteswap.h:2:2: warning: #include_next is a GCC extension
+    2 | #include_next <byteswap.h>
+      |  ^~~~~~~~~~~~
+In file included from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/bit.h:34,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/Support/MathExtras.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APInt.h:19,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/llvm/include/llvm/ADT/APFloat.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/APNumericStorage.h:12,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Decl.h:16,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/Type.h:20,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/CanonicalType.h:17,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/AST/ASTContext.h:18,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/include/clang/ExtractAPI/DeclarationFragments.h:21,
+                 from /home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/build_dir/host/llvm-project-22.1.3.src/clang/lib/ExtractAPI/DeclarationFragments.cpp:14:
+/home/runner/work/owai-ib-builder/owai-ib-builder/openwrt/staging_dir/host/include/endian.h:6:2: warning: #include_next is a GCC extension
+    6 | #include_next <endian.h>
+      |  ^~~~~~~~~~~~
+[3296/4294] Building CXX object tools/clang/lib/ExtractAPI/CMakeFiles/obj.clangExtractAPI.dir/Serialization/SymbolGraphSerializer.cpp.o
+[3297/4294] Building CXX object tools/clang/lib/Frontend/Rewrite/CMakeFiles/obj.clangRewriteFrontend.dir/InclusionRewriter.cpp.o
