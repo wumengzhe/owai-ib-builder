@@ -1,12 +1,10 @@
 name: Build OWAI-aligned ImageBuilder
 
-# ⚠️ ci-filogic 是临时 scratch 分支，每次推送都触发新 run。加 concurrency 让新推送
-#   自动 cancel 仍在跑的旧 run（cancel-in-progress），避免修一个小 bug 也要等旧 run
-#   空跑 2-4h 还失败（2026-10-24 实锤：f4133e5 的 awk 取错变体名，靠 run8 修，
-#   靠本组 cancel 掉误触发的 run7）。
-concurrency:
-  group: ci-filogic-${{ github.ref }}
-  cancel-in-progress: true
+# ⚠️ ci-filogic 是临时 scratch 分支，每次推送都触发新 run。
+#   concurrency 已下沉到 build job（见 job 级 concurrency）：必须按 matrix.target 隔离，
+#   否则五个并行平台抢同一个组 + cancel-in-progress → 互相 cancel，只有最后一个能跑完，
+#   其余构建被中断 → 残缺 IB → 门禁误报（这正是 run20~24 多平台"系统性失败"的真凶）。
+#   下沉后：新推送只 cancel 旧 run 的【同平台】job（保留原意），不误杀其他平台。
 
 # 参考 kiddin9/Kwrt 的仓库结构，但目标不同：
 #   Kwrt  = 编固件（openwrt/openwrt@openwrt-25.12 + 自家 op-packages feed，默认 APK）
@@ -140,6 +138,14 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # ⚠️⚠️ concurrency 必须按 matrix.target 隔离（2026-11-02 run20~24 多平台系统性失败根因）：
+    #   若组名不含 matrix.target，五个并行平台共享同一组 + cancel-in-progress:true → 互相 cancel，
+    #   只有最后一个能跑完，其余构建被中断 → 残缺 IB（如 rockchip 仅 79 包/1 kmod）→ 门禁误报。
+    #   按 target 隔离后：新推送只 cancel 旧 run 的【同平台】job（保留"避免修 bug 空跑"原意），
+    #   不再误杀其他平台。job 级才能拿到 matrix 上下文（工作流级全局上下文无 matrix）。
+    concurrency:
+      group: ci-filogic-${{ github.ref }}-${{ matrix.target }}
+      cancel-in-progress: true
     # ⚠️⚠️ 2026-10-25 实锤补：此前未设 timeout-minutes → 用 GitHub 默认 360 分钟硬上限。
     #    全 SoC filogic（~145 个 uboot+ATF 变体）实测 3h08m，四平台并行时一旦某个
     #    job 越过 6h，runner 会把它置为 **cancelled**（不是 failure）→
@@ -1091,13 +1097,26 @@ jobs:
           cat "$D/repositories.conf" 2>/dev/null || echo "(无 repositories.conf)"
           echo ""
           echo "--- IB 内 packages/ 统计 ---"
-          TOT=$(tar -tf "$IB" | grep -cE 'packages/([^/]*/)?[^/]*\.ipk$' || true)
-          KMOD=$(tar -tf "$IB" | grep -cE 'packages/([^/]*/)?kmod-[^/]*\.ipk$' || true)
+          LIST=$(tar -tf "$IB" | grep -E 'packages/([^/]*/)?[^/]*\.ipk$')
+          TOT=$(echo "$LIST" | grep -cE '.' || true)
+          KMOD=$(echo "$LIST" | grep -cE 'kmod-[^/]*\.ipk$' || true)
           echo "总 ipk 数 = $TOT"
           echo "kmod 数   = $KMOD"
           PKGMGR=$( [ -f "$D/repositories.conf" ] && echo opkg || echo apk )
           echo "包管理    = $PKGMGR"
           echo ""
+          # ⚠️⚠️ 构建完整性快检（先于逐包断言，2026-11-02 新增）：
+          #   若总 ipk 异常低（正常完整 IB 数千包）或 base-files/kernel 缺失，说明 Build 步骤
+          #   有包/kernel 在 6.18 编译失败（make -k 带错继续 → 只产出残缺 IB），**不是 IB 配置
+          #   缺包**。此时若直接走下方逐包断言，会列出一堆"缺失"误导排查（如 rockchip 仅 79 包
+          #   报"缺 base-files/kernel/netifd…"）。故先给出明确结论 + 定位，直接 fail。
+          #   定位：失败 job → 展开 'Dump diagnostics' 步（或 job 的 Summary tab）→ 查
+          #   '① 全部 make 失败目标行' / '② 首个失败目标上下文'，即首个 make[?]: *** [...] Error 1。
+          if [ "$TOT" -lt 200 ] || ! echo "$LIST" | grep -qE '(^|/)(base-files|kernel)[0-9]*_[^/]*\.ipk$'; then
+            echo "::error::IB 构建不完整（总 ipk=$TOT，远低于正常 IB 的数千；base-files/kernel 缺失=内核或核心包在 6.18 编译失败，被 make -k 带错继续后产出残缺 IB）。这是 Build 步骤的编译失败，不是 IB 配置缺包。"
+            echo "::error::定位编译失败：失败 job → 展开 'Dump diagnostics to ci-logs branch (on failure)' 步（或点 job 的 Summary tab）→ 查 '① 全部 make 失败目标行' / '② 首个失败目标上下文' = 首个 make[?]: *** [...] Error 1。"
+            exit 1
+          fi
           # ⚠️⚠️ 核心用户态链硬门禁（2026-10-22 实锤后新增）：
           #   此前本步只「数 ipk 个数」，于是 run 39593223394 四平台全绿、Release 正常发布，
           #   而产出的 IB 实际缺 11 项核心包（base-files/kernel/dnsmasq-full/firewall4/
@@ -1107,7 +1126,6 @@ jobs:
           #   但 CI 不该把残缺 IB 发成 Release。这里在**发布前**逐包断言，缺一个就 fail。
           #   名单与 assembler 的 verify_ib 逐字对齐。
           echo "--- 核心用户态链断言（17 项，缺一即 fail）---"
-          LIST=$(tar -tf "$IB" | grep -E 'packages/([^/]*/)?[^/]*\.ipk$')
           MISS=""
           for p in base-files libc kernel uci netifd dnsmasq-full firewall4 \
                    nftables-json luci-base luci-compat luci-lib-nixio \
@@ -1393,6 +1411,10 @@ jobs:
             fi
           } > /tmp/diag.txt 2>&1
           cat /tmp/diag.txt
+          # ⚠️ 双保险：诊断同时写进 job Summary（GitHub Actions 页面可见），
+          #    即便下方 git push 失败（并发推分支偶发静默失败→本机失明），
+          #    用户点进失败 job 的 Summary tab 也能直接看到全文，无需下载 artifact。
+          cat /tmp/diag.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           D=/tmp/cilog; rm -rf "$D"
           RUNREF="ci-logs-${{ github.run_id }}-${TARGET_SAFE}"
           # ⚠️ 推到【每 job 唯一分支】ci-logs-<run_id>-<target>：四平台并行零冲突，
