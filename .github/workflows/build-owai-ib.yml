@@ -42,14 +42,17 @@ on:
         required: false
         default: '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]'
       openwrt_branch:
-        # ⚠️ 2026-10-31 起源码改为从 wumengzhe/lede fork 克隆（见下方 Clone 步 repository），
-        #    故本输入默认分支也一并改为 wmz-lede-multisize（原 openwrt/openwrt@openwrt-25.12 不再使用）。
-        #    填 master 仍会升到 6.18 代（qualcommax/rockchip 的 config-6.18 已就位）；
-        #    wmz-lede-multisize 为 6.12 代（与 owai 25.12 对齐，且含我们的设备移植）。
-        description: 'wumengzhe/lede 分支（fork 源）。默认 wmz-lede-multisize（6.12 代，含 S20/Keenetic/Netcraze 移植）；改 master 则内核升到 6.18 代'
+        # ⚠️ 2026-11-02 起克隆源改为 VIKINGYFY/immortalwrt 的 owrt 分支（见 Clone 步 repository）。
+        #    原因：wumengzhe/lede(wmz-lede-multisize) 是 coolsnowwolf/lede 衍生的 6.18 内核树，
+        #    缺 kmod-ice 等驱动适配，CONFIG_ALL_KMODS=y 下必挂（run20~22 连续失败）；
+        #    VIKINGYFY/immortalwrt 是 ImmortalWrt 体系、原生 6.18、S20/Keenetic/Netcraze 等移植
+        #    原生存在，kmod 适配完整。
+        #    owrt 分支的 mediatek/qualcommax/rockchip 三个平台 KERNEL_PATCHVER 均已为 6.18，
+        #    故下方「强制 6.12→6.18」sed 对其为空操作（不会改坏）。
+        description: 'VIKINGYFY/immortalwrt 分支。默认 owrt（原生 6.18，含 S20 等移植）；如需特定版本可填其他分支或配合 openwrt_ref 钉 sha'
         required: true
-        # default: 'openwrt-25.12'   # ← 原默认值（openwrt/openwrt 上游分支），2026-10-31 弃用
-        default: 'wmz-lede-multisize'
+        # default: 'wmz-lede-multisize'   # ← 2026-11-02 弃用（coolsnowwolf/lede 衍生 6.18 缺 kmod 适配）
+        default: 'owrt'
       openwrt_ref:
         # ✅ 2026-10-25 用户明确：「内核版本不一定非得控制在 6.12.108」——故取消默认钉版，
         #    改为**跟随 openwrt_branch 的分支 HEAD**（每次 CI 拉该分支最新提交）。
@@ -114,7 +117,7 @@ env:
   #    改为在首个 step 用「矩阵 step 级 env」写入 $GITHUB_ENV（见 Show parameters），
   #    同时生成 TARGET_SAFE（把 / 换成 -，供 artifact 名 / Release tag 用，Git tag 禁 /）。
   # BRANCH: ${{ inputs.openwrt_branch || 'openwrt-25.12' }}   # ← 原：openwrt/openwrt 上游分支，2026-10-31 弃用
-  BRANCH: ${{ inputs.openwrt_branch || 'wmz-lede-multisize' }}   # ← 新：wumengzhe/lede fork 分支（含设备移植）
+  BRANCH: ${{ inputs.openwrt_branch || 'owrt' }}   # ← VIKINGYFY/immortalwrt 的 owrt 分支（原生 6.18，含 S20 等移植）
   # ✅ 2026-10-25 起 REF 默认为空 = **不钉版**，随 BRANCH 的 HEAD 走（用户明确「内核版本
   #    不一定非得控制在 6.12.108」）。需要复现/二分时由 inputs.openwrt_ref 传完整 40 位 sha
   #    即可回到钉版。Schedule 触发时 inputs.* 全空，这里也就保持空 → 定时构建自动取最新。
@@ -215,7 +218,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           # repository: openwrt/openwrt   # ← 原：官方上游仓，2026-10-31 弃用（不含我们的设备移植）
-          repository: wumengzhe/lede      # ← 新：私有 fork，含 S20/S20M/S20P、Keenetic KN-4410、Netcraze NC-3411/NC-4410 移植
+          # repository: wumengzhe/lede      # ← 2026-11-02 弃用：coolsnowwolf/lede 衍生的 6.18 内核树缺 kmod-ice 等驱动适配，ALL_KMODS 下必挂
+          repository: VIKINGYFY/immortalwrt   # ← 现：V佬 immortalwrt fork 的 owrt 分支（原生 6.18，S20 等移植原生存在，kmod 适配完整）
           # REF 为空 → 取 BRANCH 的 HEAD（不钉版，默认行为）；REF 有值 → 钉那个 sha。
           # 下一步会打印 SOURCE=<完整 sha>，即使是随 HEAD 走的构建也能精确溯源。
           ref: ${{ env.REF || env.BRANCH }}
@@ -479,6 +483,8 @@ jobs:
         # 用户 2026-10-31 决策：全平台切 6.18。rockchip/armv8 本就 6.18（sed 幂等）。
         # 注意：此 sed 必须在 defconfig 之前（Generate .config 步之前），否则 KERNEL_PATCHVER
         # 不生效。本步位于 feeds/defconfig 之前，满足。
+        # ⚠️ 2026-11-02：克隆源切到 VIKINGYFY/immortalwrt@owrt 后，三个平台 KERNEL_PATCHVER
+        #   本就已是 6.18，此 sed 匹配 6.12 失败→纯空操作（无害，保留以防回切 wumengzhe/lede）。
         working-directory: openwrt
         run: |
           for f in target/linux/mediatek/Makefile target/linux/qualcommax/Makefile target/linux/rockchip/Makefile; do
