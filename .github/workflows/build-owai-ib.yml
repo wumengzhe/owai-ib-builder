@@ -1368,6 +1368,24 @@ jobs:
                 S=$(( L > 40 ? L - 40 : 1 )); E=$(( L + 10 ))
                 sed -n "${S},${E}p" /tmp/build.log
               fi
+              echo "--- ②b 真凶上下文（围绕 OpenWrt 汇总行 'ERROR: package/X failed to build' 的 80 行前 + 20 行后）---"
+              # ⚠️ ② 抓的是【首个】make[?]: *** 行，往往是被 make 标 (ignored) 的噪音
+              #    （如 libtool abort-due-to-no-makefile / uninstall Error 2 (ignored)）。
+              #    真正致命的是 OpenWrt 的汇总行 'ERROR: package/X failed to build'，
+              #    其【紧上方】就是该包的编译/下载真错。本段优先抓它，自解释失败原因。
+              grep -nE 'ERROR: package/.* failed to build' /tmp/build.log > /tmp/fatals.txt 2>/dev/null || true
+              if [ -s /tmp/fatals.txt ]; then
+                while read -r eline; do
+                  N=$(printf '%s' "$eline" | cut -d: -f1)
+                  P=$(printf '%s' "$eline" | sed -E 's/.*ERROR: package\/([^ ]+) failed to build.*/\1/')
+                  echo ">>> 致命包: $P (build.log:$N)"
+                  S=$(( N > 80 ? N - 80 : 1 )); E=$(( N + 20 ))
+                  sed -n "${S},${E}p" /tmp/build.log
+                  echo "<<<"
+                done < /tmp/fatals.txt
+              else
+                echo "(无 'ERROR: package/X failed to build' 行 → 失败非包编译类，见 ①/③/④)"
+              fi
               echo "--- ③ 常见错误模式行（error/ERROR/Error/undefined/No rule/missing/DTC）---"
               grep -nE '(^| )(ERROR|Error):|error:|undefined reference|No rule to make target|is missing dependencies|not found|dtc:|DTC|Reference to non-existent|duplicate (label|node)|syntax error' /tmp/build.log | head -400
               echo "--- ③b missing-dependencies 上下文（列出缺失的具体 .so）---"
