@@ -871,33 +871,37 @@ jobs:
           echo "注：base-files/libc/kernel 三者由 imagebuilder/Makefile 的无条件强制拷保证进 IB，"
           echo "    不依赖此处是否选中；其余项由 Inspect produced IB 逐包断言兜底。"
 
-      - name: Pre-fetch libffi (GitHub releases 限流 + OpenWrt/ImmortalWRT 源镜像对新发布 3.8.0 滞后 → 下载全挂)
+      - name: Pre-seed dl/ from OpenWRT/ImmortalWRT source mirrors (绕开外部下载限流导致的损坏 tarball)
         working-directory: openwrt
         run: |
-          # ⚠️ 2026-11-02：libffi 是 base 依赖（最早编译）。其 GitHub releases 源在 CI 匿名下载被限流(403)，
-          #   而 OpenWrt/ImmortalWRT 源镜像对新发布的 3.8.0 滞后未同步(404)，download.pl 的三层
-          #   （GitHub→ImmortalWRT→OpenWrt 源）全挂 → libffi 下载失败 → 整盘编译失败（run25/run26 实锤）。
-          #   这里从 OpenWrt 源镜像（已确认托管 3.8.0，sources.openwrt.org 实测 octet-stream）预下载进 dl/，
-          #   GitHub 作兜底，绕过 download.pl 的限流/滞后。make download 仍会按 PKG_HASH 校验。
+          # ⚠️ 2026-11-03：run25/26/27 连续因外部下载被限流，包源码下到损坏/HTML 文件 →
+          #   configure 污染 → host 工具(libffi/libtool)编译失败（"no Makefile" / "1q: command not found"）。
+          #   OpenWrt download.pl 默认 GitHub 优先；限流下先挂、镜像兜底也不稳。
+          #   根治：构建前把树内所有【字面 PKG_SOURCE】从 OpenWRT/ImmortalWRT 源镜像预下载进 dl/。
+          #   download.pl 见 dl/ 已有同名且哈希吻合的文件会跳过下载 → 彻底绕开外部限流。
+          #   （动态 PKG_SOURCE 如 $(PKG_NAME)-$(PKG_VERSION).tar.gz 无法静态预取，仍交 download.pl，
+          #    由 CURL_OPTIONS --retry-all-errors 重试兜底。）
           mkdir -p dl
-          F=libffi-3.8.0.tar.gz
+          mapfile -t SRCS < <(grep -rhoE 'PKG_SOURCE[[:space:]]*:[[:space:]]*=[[:space:]]*[^[:space:]]+' --include=Makefile . 2>/dev/null \
+                              | sed -E 's/^PKG_SOURCE[[:space:]]*:[[:space:]]*=[[:space:]]*//' | sort -u)
+          TOTAL=${#SRCS[@]}
           OK=0
-          for u in \
-            "https://downloads.openwrt.org/sources/$F" \
-            "https://sources.openwrt.org/$F" \
-            "https://github.com/libffi/libffi/releases/download/v3.8.0/$F"; do
-            echo "尝试预下载 libffi: $u"
-            if curl -fL --retry 5 --retry-delay 2 "$u" -o "dl/$F" 2>/dev/null; then
-              echo "✓ libffi 预下载成功: $u"; OK=1; break
-            else
-              echo "· $u 失败，尝试下一源"; rm -f "dl/$F"
-            fi
+          echo "树内字面 PKG_SOURCE 数: $TOTAL（将从源镜像预下载进 dl/）"
+          for f in "${SRCS[@]}"; do
+            got=""
+            for m in \
+              "https://downloads.openwrt.org/sources/$f" \
+              "https://sources.openwrt.org/$f" \
+              "https://downloads.immortalwrt.org/sources/$f"; do
+              if curl -fL --retry 5 --retry-delay 2 --connect-timeout 10 "$m" -o "dl/$f" 2>/dev/null && [ -s "dl/$f" ]; then
+                got="$m"; break
+              else
+                rm -f "dl/$f"
+              fi
+            done
+            [ -n "$got" ] && OK=$((OK+1)) || echo "· 镜像无 $f（留 download.pl 走 GitHub）"
           done
-          if [ "$OK" = "1" ] && [ -s "dl/$F" ]; then
-            echo "libffi tarball 已就位 ($(wc -c < dl/$F) bytes)"
-          else
-            echo "::warning::libffi 预下载失败，交由 download.pl 兜底（可能再挂，届时看 ②c 下载报错）"
-          fi
+          echo "源镜像预下载成功: $OK / $TOTAL"
 
       - name: Download sources
         working-directory: openwrt
