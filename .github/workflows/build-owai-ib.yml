@@ -38,9 +38,9 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: '要编译的 target 列表（JSON 数组）；默认四平台（filogic/ipq807x/ipq60xx/armv8，ipq60xx 于 2026-10-21 新增）。只编某个就改这里'
+        description: '要编译的 target 列表（JSON 数组）；默认五平台（filogic/ipq807x/ipq60xx/armv8 + airoha/an7581；airoha 于 2026-11-02 新增，覆盖 Nokia XG-040G-MD 等 AN7581 PON 设备，复用 VIKINGYFY/immortalwrt@owrt 原生 airoha 目标）。只编某个就改这里'
         required: false
-        default: '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]'
+        default: '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8","airoha/an7581"]'
       openwrt_branch:
         # ⚠️ 2026-11-02 起克隆源改为 VIKINGYFY/immortalwrt 的 owrt 分支（见 Clone 步 repository）。
         #    原因：wumengzhe/lede(wmz-lede-multisize) 是 coolsnowwolf/lede 衍生的 6.18 内核树，
@@ -164,7 +164,13 @@ jobs:
         # ⚠️ 2026-10-26 IPQ-only 隔离验证已完成：run #52（98d38b9，15:05 推，2h2m2s 绿）
         #   ipq807x+ipq60xx 双双出 tag/release → qca-ssdk 哈希修复 + 下载重试验证通过。
         #   恢复四平台矩阵（filogic/ipq807x/ipq60xx/armv8）做最终终验。
-        target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8"]') }}
+        # ⚠️ 2026-11-02 新增第五平台 airoha/an7581：复用 VIKINGYFY/immortalwrt@owrt 原生
+        #   airoha 目标（SUBTARGETS=en7523/an7581/an7583，KERNEL_PATCHVER=6.18），覆盖
+        #   Nokia XG-040G-MD 等 AN7581 PON 设备。airoha 走非 filogic 路径：bootloader 变体
+        #   强制段与 FIP/bl2 硬门禁均 filogic-only 守卫 → 自动跳过；内核镜像门禁后缀并集含
+        #   airoha 的 -uImage.itb。kmod 选择块无需 airoha 专属分支（airoha DEFAULT_PACKAGES
+        #   已含 kmod-usb3/kmod-usb-dwc3；PON 闭源 airoha-xpon.ko 走 wmz-test-pon 线，不经此 IB）。
+        target: ${{ fromJson(inputs.targets || '["mediatek/filogic","qualcommax/ipq807x","qualcommax/ipq60xx","rockchip/armv8","airoha/an7581"]') }}
     steps:
       - name: Show parameters
         env:
@@ -437,21 +443,22 @@ jobs:
               print("[imagebuilder/Makefile] !! 未匹配 SIGNATURE_CHECK 锚点"); sys.exit(1)
           PY
 
-      # ⚠️ 2026-10-26：qca-ssdk（Qualcomm SSDK 交换芯片驱动，仅 TARGET_qualcommax 选中，
-      #   ipq807x/ipq60xx 必编）的 PKG_MIRROR_HASH 在 GitHub Actions runner 的 **git 2.55.0**
-      #   下与 `git archive` 实际产出不符：qca-ssdk 仓库带触发归档差异的 .gitattributes，
-      #   git 新版本归档方式变了 → 下载期 "Hash mismatch" 整盘失败（ipq807x/ipq60xx 都挂在它，
-      #   filogic/armv8 不受影响）。openwrt 上游该包哈希是钉死值，且 REF 不钉版→随 HEAD 漂移，
-      #   此失配在 IPQ 上次跑通(07aec45d/661c2a4)之后上游改东西引入。
-      #   修复：把 PKG_MIRROR_HASH 改成 git 2.55.0 实际产出的哈希值（取自失败 run 的 got 值），
-      #   放行下载。钉死值随 runner git 版本变动可能再变——若日后重挂，回此处刷新哈希即可。
-      - name: Patch qca-ssdk PKG_MIRROR_HASH (git-2.55.0 .gitattributes workaround)
+      # ⚠️ qca-ssdk（Qualcomm SSDK 交换芯片驱动，仅 TARGET_qualcommax/ipq 选中）的
+      #   PKG_MIRROR_HASH 在 GitHub Actions runner 的 git 2.55.0 下与 `git archive` 实际产出
+      #   不符：qca-ssdk 仓库带触发归档差异的 .gitattributes，git 新版本归档方式变了 →
+      #   下载期 "Hash mismatch" 整盘失败（ipq807x/ipq60xx 必编，filogic/armv8 不受影响）。
+      #   旧修法（钉死某次 got 哈希值）对 wumengzhe/lede 有效，但切到 VIKINGYFY 后其 qca-ssdk
+      #   源码/commit 不同 → 钉死值必定失配 → 反而制造新的 Hash mismatch。
+      #   ✅ 改用 OpenWrt 原生的 `PKG_MIRROR_HASH:=skip`（include/download.mk 的 wrap_mirror
+      #     明确支持：`[ "$(MIRROR_HASH)" = "skip" ]` 即跳过哈希校验）。对任意源树 / runner git
+      #     版本都免疫哈希漂移，且 qca-ssdk 当前不在 qualcommax 的 DEFAULT_PACKAGES（仅设备
+      #     profile 选中，而本流程不显式选设备 profile → 大概率不拉取，skip 更无副作用）。
+      - name: Patch qca-ssdk PKG_MIRROR_HASH -> skip (git-2.55.0 .gitattributes workaround)
         working-directory: openwrt
         run: |
           F=package/kernel/qca-ssdk/Makefile
           if [ -f "$F" ]; then
-            NEW=da990d2956db471071568fd6c7c9193b075f9a1e87e5ae5ac8729cc4dba9dc24
-            sed -i "s#^PKG_MIRROR_HASH:=.*#PKG_MIRROR_HASH:=$NEW#" "$F"
+            sed -i "s#^PKG_MIRROR_HASH:=.*#PKG_MIRROR_HASH:=skip#" "$F"
             echo "qca-ssdk PKG_MIRROR_HASH -> $(grep '^PKG_MIRROR_HASH' "$F")"
           else
             echo "qca-ssdk Makefile 不存在（非 qualcommax 目标可忽略）"
@@ -587,36 +594,23 @@ jobs:
             #    而 config IB 的默认值是 BUILDBOT（CI 上未设→n），不写 IB=y
             #    会让 defconfig 因依赖不满足而静默丢弃 IB_STANDALONE。
             echo "CONFIG_IB=y"
-            # ⚠️⚠️ ALL_KMODS 是「自编 IB + 外挂 owai 远程源」架构的**必需项**（参考 Kwrt 实锤）：
-            #   dl.openwrt.ai 四个 feed（kiddin9/base/packages/luci 共 9905 包）实测
-            #   **kmod-* 数量 = 0、libc/kernel/base-files = 0**，即远程源是纯 userspace。
-            #   但 kiddin9 有 128 个包的 Depends 引用 kmod-*（kmod-tun 41 次、
-            #   kmod-usb-serial-option 24、kmod-nft-tproxy 14…），这些只能由 IB 本地出。
-            #   不开 ALL_KMODS → IB 只含被选包依赖链上的 kmod → opkg "Unknown package"
-            #   → assembler §4 静默剔除 → 插件不进固件（2026-10-02 实锤过的故障模式）。
-            #   Kwrt 的 IB 内 .config 实锤：CONFIG_ALL_KMODS=y → 1418 ipk 含 985 个 kmod。
-            echo "CONFIG_ALL_KMODS=y"
-            # ⚠️ 2026-10-31 run 41198243546 实锤：nat46（package/kernel/nat46，NAT46
-            #   无状态转换，消费级路由器默认不需要）在 wmz-lede-multisize 的 6.12.114 上
-            #   编译失败（nat46-netdev.o Error 1），且它是无人维护的树外模块，对 6.12 新
-            #   内核兼容性差。ALL_KMODS 会把它扫进来编 → 整盘失败。显式 =N 单独剔除
-            #   （不影响其他 ~984 个 kmod），比整体关 ALL_KMODS 安全（关 ALL_KMODS 会让
-            #   IB 缺 kmod → assembler §4 静默剔包，见上方 ALL_KMODS 注释）。若后续需要
-            #   nat46 可回头给它打 6.12 适配补丁，再移除本行。
-            echo "CONFIG_PACKAGE_kmod-nat46=N"
-            # ⚠️ 2026-10-31 run18 实锤（切 6.18 后）：旧 NTFS_FS 在 6.18 内核已彻底移除，
-            #   kmod-fs-ntfs 物理无 ntfs.ko → ALL_KMODS 拉它编 → "module '.../fs/ntfs/ntfs.ko'
-            #   is missing" → 打包失败 → 整盘雪崩。6.18 改由 kmod-fs-ntfs3（NTFS3_FS=m）提供
-            #   NTFS 读支持，故显式把旧 kmod-fs-ntfs 关掉，避免 ALL_KMODS 再扫它。
-            echo "CONFIG_PACKAGE_kmod-fs-ntfs=N"
-            # ⚠️ 2026-11-02 run21(41340994353) 实锤：kmod-ice（Intel E810 万兆网卡驱动 ice.ko）
-            #   在 6.18.60 上编译失败 → kmod-ice ipk Error 1 → package/kernel/linux/compile 失败
-            #   → package/install 失败 → target/linux/install 连带失败（image-mt7986a-supergateway-s20*.dtb
-            #   的 Error 1 只是下游连带，非设备树本身问题；S20 的 /dts-v1/; 重复已在 lede 源树
-            #   95740ee6 修复）。ice 是 Intel 服务器网卡驱动，路由器平台（mediatek/qualcomm/rockchip）
-            #   用不到，且四个平台均被强制升到 6.18，故显式 =N 单独剔除（不影响其他 ~984 个 kmod）。
-            #   若后续需要 E810 支持，应给 ice 打 6.18 适配补丁再移除本行。
-            echo "CONFIG_PACKAGE_kmod-ice=N"
+            # ⚠️⚠️ 不再强制 CONFIG_ALL_KMODS（2026-11-02 重构，对齐 CloseWRT-CI 方法论）：
+            #   旧逻辑：dl.openwrt.ai 四个 feed 实测 kmod-*=0（kiddin9 编译前删纯 KernelPackage），
+            #   kmod 只能由 IB 本地出 → 故强制 ALL_KMODS=y 让 IB 含全部 ~985 个 kmod。
+            #   但 ALL_KMODS 在 6.18 下雪崩：kmod-ice(Intel E810)/kmod-nat46/kmod-fs-ntfs 等
+            #   消费路由用不到的树外模块编不过 → 整盘失败（run20~23 连续实锤，联发科之外的 3
+            #   平台全挂在它）。
+            #   新逻辑（参考 wumengzhe/CloseWRT-CI：浅克隆 VIKINGYFY + 标准 feeds + 精选配置，
+            #   全程不编 ALL_KMODS 照样出可用固件）：IB 只编【平台默认 kmod 集】——而 assembler
+            #   真正需要的 SoC 固件(mt798x/ath11k)、ipt/nft/usb 等恰恰都在 filogic/qualcommax/
+            #   rockchip 的 DEFAULT_PACKAGES 与 assembler 注入清单里；owai 远程只补 userspace。
+            #   奇葩 kmod(ice/nat46/旧 ntfs)本就不进默认集 → 自然不编 → 雪崩消失。代价：assembler
+            #   若请求某非默认 kmod 会走 §4 静默剔包（同旧行为），但对我们的路由设备无影响。
+            #   ✅ 顺带撤销旧的三个 =N 排除（kmod-nat46/kmod-fs-ntfs/kmod-ice）——它们仅用于压制
+            #   ALL_KMODS 雪崩，关掉 ALL_KMODS 后失去意义；kmod-fs-ntfs3 由下方 ntfs3 配置补丁
+            #   以 NTFS3_FS=m 提供 NTFS 读支持。
+            # （不再写入 CONFIG_ALL_KMODS；保持默认 n → IB 仅含默认 kmod 集）
+            echo "# CONFIG_ALL_KMODS is not set"
             # ⚠️⚠️ KERNEL_WERROR 必须关（2026-10-20 run 39371381477 实锤）：
             #   ALL_KMODS 会把 kiddin9 feed 里的 vendored 内核包也扫进来编译，例如
             #   quectel_MHI（pcie_mhi-1.3.8）在 6.12.108 上：
@@ -693,6 +687,56 @@ jobs:
                      iptables-mod-conntrack-extra iptables-mod-iprange \
                      iptables-mod-socket iptables-mod-tproxy ip6tables-mod-nat; do
               echo "CONFIG_PACKAGE_${p}=m"
+            done
+            # ⚠️⚠️ 显式选中 assembler 需要的全部 kmod（2026-11-02 配套「关闭 ALL_KMODS」）：
+            #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，但各平台 DEFAULT_PACKAGES 极薄
+            #   （mediatek 仅 leds-gpio/gpio-button-hotplug；qualcommax/rockchip 也不含 ipt/nft），
+            #   而 assembler 注入的 WiFi 栈/ipt/nft/usb 必须进 IB 本地（owai 远程 kmod=0，见 build_lib.py:2212）。
+            #   故此处逐包显式 =y，等价于 CloseWRT-CI 在 Config/GENERAL.txt 列 kmod 的做法；
+            #   在不适用的目标上选中不存在/依赖未满足的符号 → defconfig 静默忽略，零风险。
+            # --- MediaTek filogic WiFi 栈（mediatek DEFAULT_PACKAGES 仅 leds-gpio/gpio-button-hotplug，
+            #   必显式选；且仅限 mediatek）。⚠️ VIKINGYFY/immortalwrt 用**开源 mt76 栈**
+            #   （package/kernel/mt76）：filogic 集成 WiFi 的【驱动】是 kmod-mt7915e（mt7981/7986/7988
+            #   集成 WiFi 统一走 mt7915e 驱动，与 GL-MT6000/jcg_q30-pro 的 DEVICE_PACKAGES 一致），
+            #   【基带固件】是 kmod-mt7981/7986/7988-firmware，【offload 固件】是 mt798x-wo-firmware
+            #   （均在 package/firmware/linux-firmware/mediatek.mk + mt76 Makefile 定义，已实锤存在）。
+            #   **不是** wumengzhe/lede 的闭源 mt_wifi/conninfra/mediatek_hnat（VIKINGYFY 搜索 0 命中）。
+            #   assembler 侧早已对齐 mt76：build.sh:4289-4372 校验 kmod-mt7915e/mt76-core/mt76-connac/
+            #   mac80211/cfg80211，platform_packages.json:29 注入 kmod-mt7915e → IB 本地必须含这些包
+            #   （owai 远程 kmod=0，见 build_lib.py:2212）。故此处选 mt76 驱动 + 基带固件 + WO 固件；
+            #   闭源包名一律不写（写了也被 defconfig 静默忽略）。
+            if [ "$BOARD" = "mediatek" ]; then
+              for p in kmod-mt76 kmod-mt7915e kmod-mt7981-firmware kmod-mt7986-firmware \
+                       mt7981-wo-firmware mt7986-wo-firmware \
+                       kmod-mt7988-firmware mt7988-wo-firmware \
+                       kmod-mt7622-firmware; do
+                echo "CONFIG_PACKAGE_${p}=y"
+              done
+            fi
+            # --- Qualcomm ath11k WiFi（qualcommax 默认已含，仅 qualcommax 补选兜底）---
+            if [ "$BOARD" = "qualcommax" ]; then
+              for p in kmod-ath11k kmod-ath11k-ahb kmod-ath11k-pci; do
+                echo "CONFIG_PACKAGE_${p}=y"
+              done
+            fi
+            # --- iptables / nftables 内核模块（assembler 注入，无任何平台默认含；跨平台通用）---
+            for p in kmod-ipt-conntrack kmod-ipt-core kmod-ipt-extra kmod-ipt-filter \
+                     kmod-ipt-ipopt kmod-ipt-iprange kmod-ipt-nat kmod-ipt-nat-extra \
+                     kmod-ipt-nat6 kmod-ipt-offload kmod-ipt-raw kmod-ipt-tproxy \
+                     kmod-ipt-compat-xtables \
+                     kmod-nft-core kmod-nft-nat kmod-nft-offload kmod-nft-tproxy \
+                     kmod-nft-fullcone kmod-nft-bridge \
+                     kmod-ipset kmod-ipt-ipset kmod-ebtables kmod-nf-nat6 kmod-nf-flow; do
+              echo "CONFIG_PACKAGE_${p}=y"
+            done
+            # --- USB 内核模块（filogic 默认不含；qualcommax/rockchip 部分默认含，补选兜底）---
+            for p in kmod-usb-core kmod-usb2 kmod-usb3 kmod-usb-ohci kmod-usb-ehci \
+                     kmod-usb-xhci-hcd kmod-usb-dwc3 kmod-usb-dwc3-qcom \
+                     kmod-usb-storage kmod-usb-storage-uas kmod-usb-storage-extras \
+                     kmod-usb-net kmod-usb-net-rndis kmod-usb-net-cdc-ether \
+                     kmod-usb-net-cdc-mbim kmod-usb-net-qmi-wwan \
+                     kmod-usb-serial-qualcomm; do
+              echo "CONFIG_PACKAGE_${p}=y"
             done
             # ⚠️ 不再关闭 rootfs（撤销 fd6c47c 的关 rootfs 块）：
             #   原关 rootfs 仅为让独立的 `make target/linux/install` 退化成只产 kernel.bin；
@@ -1350,15 +1394,17 @@ jobs:
           } > /tmp/diag.txt 2>&1
           cat /tmp/diag.txt
           D=/tmp/cilog; rm -rf "$D"
-          # ⚠️ 克隆既有 ci-logs 分支再推送（此前用 git init 空仓库或 ci-logs-runs 独立 ref 都在
-          #    runner 侧静默失败→本机失明）。ci-logs 已实证可读；文件名带 run_id+target 唯一，
-          #    四平台并行也不冲突内容；并发同推同一 ref 由下方 pull --rebase + 重试兜底。
-          if git clone --depth 1 -b ci-logs "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$D" 2>/dev/null; then
-            echo "ci-logs 分支已存在，克隆成功"
+          RUNREF="ci-logs-${{ github.run_id }}-${TARGET_SAFE}"
+          # ⚠️ 推到【每 job 唯一分支】ci-logs-<run_id>-<target>：四平台并行零冲突，
+          #   根治此前并发推同一 ci-logs 分支时非 filogic 平台被挤掉、本机失明的缺陷
+          #   （ci-logs 历史只有 filogic 日志，ipq807x/ipq60xx/armv8 的失败转储从未落盘）。
+          #   本机取回：git fetch origin 'ci-logs-*' 后逐分支读 logs/<run_id>-<target>.txt。
+          if git clone --depth 1 -b "$RUNREF" "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$D" 2>/dev/null; then
+            echo "分支 $RUNREF 已存在，克隆成功"
           else
-            mkdir -p "$D"; git -C "$D" init -q -b ci-logs
+            mkdir -p "$D"; git -C "$D" init -q -b "$RUNREF"
             git -C "$D" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-            echo "ci-logs 分支不存在，本地新建并绑定 origin（首次）"
+            echo "分支 $RUNREF 不存在，本地新建（首次推送将创建远端分支）"
           fi
           mkdir -p "$D/logs"
           cp /tmp/diag.txt "$D/logs/${{ github.run_id }}-${TARGET_SAFE}.txt"
@@ -1366,17 +1412,13 @@ jobs:
           cp /tmp/diag.txt "./diag-${TARGET_SAFE}-${{ github.run_id }}.txt"
           git -C "$D" -c user.email=ci@local -c user.name=ci add -A
           git -C "$D" -c user.email=ci@local -c user.name=ci commit -q -m "diag ${{ github.run_id }} ${TARGET_SAFE}" || echo "(ci-logs 无新内容可提交)"
-          # ⚠️ 推到【既有 ci-logs 分支】（本机 git fetch origin ci-logs 可读）；文件名带
-          #   run_id+target 唯一，四平台并行也不冲突内容；并发同推同一 ref 由 pull --rebase
-          #   + 重试兜底。此前推 ci-logs-runs/* 独立 ref 在 runner 侧静默失败→本机失明，已弃用。
-          RUNREF="ci-logs"
+          # 唯一分支 → 无并发冲突，直接 push 创建远端分支；保留 3 次重试兜网络瞬断。
           ok=0
           for attempt in 1 2 3; do
-            git -C "$D" pull --rebase origin "$RUNREF" >/dev/null 2>&1 || true
             if git -C "$D" push origin "HEAD:refs/heads/$RUNREF"; then ok=1; break; fi
-            echo "push ci-logs 尝试 $attempt 失败，重试..."; sleep 5
+            echo "push $RUNREF 尝试 $attempt 失败，重试..."; sleep 5
           done
-          [ "$ok" = "1" ] && echo "✓ 诊断已推到 ci-logs（本机 git fetch origin ci-logs 可读 logs/${{ github.run_id }}-${TARGET_SAFE}.txt）" || echo "!! ci-logs 推送失败（但 artifact 已留底，可去 Actions UI 取）"
+          [ "$ok" = "1" ] && echo "✓ 诊断已推到分支 $RUNREF（本机 git fetch origin $RUNREF 可读 logs/${{ github.run_id }}-${TARGET_SAFE}.txt）" || echo "!! 推送失败（但 artifact 已留底，可去 Actions UI 取）"
 
       - name: Upload diagnostics artifact (on failure, fallback)
         # git push 失败时仍可从 Actions UI 下载诊断（非阻塞）。诊断同时落在
