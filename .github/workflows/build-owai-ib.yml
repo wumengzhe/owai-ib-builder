@@ -129,6 +129,10 @@ env:
   KIDDIN9_FEED: ${{ (inputs.kiddin9_feed == true || inputs.kiddin9_feed == '' || inputs.kiddin9_feed == null) && 'true' || 'false' }}
   VERSION_REPO: ${{ inputs.version_repo || 'https://dl.openwrt.ai/releases/25.12' }}
   VERSION_NUMBER: ${{ inputs.version_number || '25.12-owai' }}
+  # ⚠️ 2026-11-02：GitHub 对 CI 匿名下载限流(403/404)系统性出现，download.pl 自带
+  #   `curl -f --retry 3` 仍不够；此处追加重试 + 跨错误重试，覆盖瞬态限流。
+  #   download.pl 会把 CURL_OPTIONS 追加在自带 --retry 3 之后 → 末位 --retry 生效(10)。
+  CURL_OPTIONS: "--retry 10 --retry-delay 3 --retry-all-errors"
 
 # ⚠️ 私有仓默认 GITHUB_TOKEN 只有读权限，softprops/action-gh-release 发 Release 会 403
 #    （Resource not accessible by integration）。显式授予 contents:write 才能建 tag+Release。
@@ -867,6 +871,34 @@ jobs:
           echo "注：base-files/libc/kernel 三者由 imagebuilder/Makefile 的无条件强制拷保证进 IB，"
           echo "    不依赖此处是否选中；其余项由 Inspect produced IB 逐包断言兜底。"
 
+      - name: Pre-fetch libffi (GitHub releases 限流 + OpenWrt/ImmortalWRT 源镜像对新发布 3.8.0 滞后 → 下载全挂)
+        working-directory: openwrt
+        run: |
+          # ⚠️ 2026-11-02：libffi 是 base 依赖（最早编译）。其 GitHub releases 源在 CI 匿名下载被限流(403)，
+          #   而 OpenWrt/ImmortalWRT 源镜像对新发布的 3.8.0 滞后未同步(404)，download.pl 的三层
+          #   （GitHub→ImmortalWRT→OpenWrt 源）全挂 → libffi 下载失败 → 整盘编译失败（run25/run26 实锤）。
+          #   这里从 OpenWrt 源镜像（已确认托管 3.8.0，sources.openwrt.org 实测 octet-stream）预下载进 dl/，
+          #   GitHub 作兜底，绕过 download.pl 的限流/滞后。make download 仍会按 PKG_HASH 校验。
+          mkdir -p dl
+          F=libffi-3.8.0.tar.gz
+          OK=0
+          for u in \
+            "https://downloads.openwrt.org/sources/$F" \
+            "https://sources.openwrt.org/$F" \
+            "https://github.com/libffi/libffi/releases/download/v3.8.0/$F"; do
+            echo "尝试预下载 libffi: $u"
+            if curl -fL --retry 5 --retry-delay 2 "$u" -o "dl/$F" 2>/dev/null; then
+              echo "✓ libffi 预下载成功: $u"; OK=1; break
+            else
+              echo "· $u 失败，尝试下一源"; rm -f "dl/$F"
+            fi
+          done
+          if [ "$OK" = "1" ] && [ -s "dl/$F" ]; then
+            echo "libffi tarball 已就位 ($(wc -c < dl/$F) bytes)"
+          else
+            echo "::warning::libffi 预下载失败，交由 download.pl 兜底（可能再挂，届时看 ②c 下载报错）"
+          fi
+
       - name: Download sources
         working-directory: openwrt
         run: |
@@ -1386,6 +1418,8 @@ jobs:
               else
                 echo "(无 'ERROR: package/X failed to build' 行 → 失败非包编译类，见 ①/③/④)"
               fi
+              echo "--- ②c download.pl 下载报错（URL / Download failed / Hash mismatch，区分下载 vs 编译）---"
+              grep -nE 'Download failed|Downloading |\+ curl|No more mirrors|Hash of the downloaded|404|403' /tmp/build.log | tail -40 || true
               echo "--- ③ 常见错误模式行（error/ERROR/Error/undefined/No rule/missing/DTC）---"
               grep -nE '(^| )(ERROR|Error):|error:|undefined reference|No rule to make target|is missing dependencies|not found|dtc:|DTC|Reference to non-existent|duplicate (label|node)|syntax error' /tmp/build.log | head -400
               echo "--- ③b missing-dependencies 上下文（列出缺失的具体 .so）---"
