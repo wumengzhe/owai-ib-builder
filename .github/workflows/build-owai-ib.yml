@@ -453,6 +453,40 @@ jobs:
               print("[imagebuilder/Makefile] !! 未匹配 SIGNATURE_CHECK 锚点"); sys.exit(1)
           PY
 
+      # ⚠️⚠️ libffi InstallDev fficonfig.h 路径修复（2026-11-03 实锤，run 41476171687 /
+      #   41504460309 filogic 连续失败根因）：
+      #   libffi 3.8.0 实际 out-of-tree 构建在 <build_dir>/<target>/（如 mediatek/filogic/），
+      #   fficonfig.h（configure 生成的私有头）落在那里；但 OpenWrt libffi Makefile 的
+      #   InstallDev 硬编码 `cp -fpR $(PKG_BUILD_DIR)/aarch64-openwrt-linux*/fficonfig.h ...`
+      #   → glob 落空 → .libffi_installed Error 1 → 整盘编译失败。
+      #   库本身编译/安装 OK（libffi.so/.a/.pc 都装好，stall 在仅差 staging 这一步）。
+      #   此前 run25~run最新 误判为「下载限流」并加 preseed/CURL_OPTIONS —— ②c 实测零下载错误，
+      #   真正根因是这份路径假设。✅ 改为 find 定位 fficonfig.h（任何布局通用），覆盖 out-of-tree。
+      #   幂等：已替换过则本轮找不到硬编码行 → 跳过。
+      - name: Patch libffi InstallDev fficonfig.h path (out-of-tree build fix)
+        working-directory: openwrt
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          p = "package/libs/libffi/Makefile"
+          try:
+              s = open(p).read()
+          except FileNotFoundError:
+              print("[libffi/Makefile] 文件不存在，跳过（非此目标可忽略）"); sys.exit(0)
+          pat = re.compile(r"[^\n]*aarch64-openwrt-linux\*/fficonfig\.h[^\n]*\n")
+          def repl(m):
+              return ("\t@FFI_CFG=$$(find $(PKG_BUILD_DIR) -name fficonfig.h 2>/dev/null | head -1); "
+                      "[ -n \"$$FFI_CFG\" ] && cp -fpR $$FFI_CFG $(1)/usr/include/\n")
+          s2, n = pat.subn(repl, s, count=1)
+          if n == 0:
+              if "fficonfig.h" in s:
+                  print("[libffi/Makefile] !! 含 fficonfig.h 但未匹配 aarch64-openwrt-linux* 硬编码行，请检查"); sys.exit(1)
+              else:
+                  print("[libffi/Makefile] 未含 fficonfig.h 硬编码（可能已修），跳过"); sys.exit(0)
+          open(p, "w").write(s2)
+          print("[libffi/Makefile] InstallDev fficonfig.h 改为 find 定位 (n=%d)" % n)
+          PY
+
       # ⚠️ qca-ssdk（Qualcomm SSDK 交换芯片驱动，仅 TARGET_qualcommax/ipq 选中）的
       #   PKG_MIRROR_HASH 在 GitHub Actions runner 的 git 2.55.0 下与 `git archive` 实际产出
       #   不符：qca-ssdk 仓库带触发归档差异的 .gitattributes，git 新版本归档方式变了 →
