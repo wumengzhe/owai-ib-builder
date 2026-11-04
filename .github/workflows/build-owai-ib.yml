@@ -469,8 +469,42 @@ jobs:
       - name: Inject supergateway_s20 eMMC sysupgrade.itb (web-failsafe direct-flash FIT)
         # S20 系列 eMMC + yuzhi U-Boot：原生只产 sysupgrade.tar，web failsafe/后台直刷 tar 会 brick。
         # 注入自包含 FIT (sysupgrade.itb) 对齐 asus_rt-ax59u-ubi eMMC 模板；保留 tar 给 assembler 内部升级。
+        # 内联 heredoc（owai-ib-builder 仓本身未被 checkout 到磁盘，不能依赖 $GITHUB_WORKSPACE/scripts/）。
         working-directory: openwrt
-        run: python3 $GITHUB_WORKSPACE/scripts/inject_supergateway_itb.py
+        run: |
+          python3 - <<'PY'
+          import sys, os
+          TAB = chr(9)
+          NL = chr(10)
+          p = "target/linux/mediatek/image/filogic.mk"
+          if not os.path.isfile(p):
+              print("[inject] !! 找不到 %s (CWD=%s)，请确认 working-directory" % (p, os.getcwd()))
+              sys.exit(1)
+          s = open(p, encoding="utf-8").read()
+          if (TAB + "IMAGE/sysupgrade.itb := append-kernel") in s:
+              print("[inject] 已含 sysupgrade.itb，跳过（幂等）")
+              sys.exit(0)
+          block_anchor = "define Device/supergateway_s20-common"
+          img_anchor = "IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata"
+          bi = s.find(block_anchor)
+          if bi == -1:
+              print("[inject] !! 未找到 supergateway_s20-common，请检查 VIKINGYFY 源")
+              sys.exit(1)
+          ji = s.find(img_anchor, bi)
+          if ji == -1:
+              print("[inject] !! s20-common 内未找到 sysupgrade.bin 锚点")
+              sys.exit(1)
+          inject = (
+              TAB + "IMAGES := sysupgrade.bin sysupgrade.itb" + NL
+              + TAB + "KERNEL := kernel-bin | lzma" + NL
+              + TAB + "IMAGE/kernel := kernel-bin | append-dtb | lzma | fit lzma $(KDIR)/image-$(firstword $(DEVICE_DTS)).dtb" + NL
+              + TAB + "IMAGE/sysupgrade.itb := append-kernel | fit lzma $(KDIR)/image-$(firstword $(DEVICE_DTS)).dtb external-with-rootfs | pad-rootfs | append-metadata" + NL
+          )
+          s = s[:ji] + inject + s[ji:]
+          open(p, "w", encoding="utf-8").write(s)
+          assert (TAB + "IMAGE/sysupgrade.itb := append-kernel") in s, "itb 注入校验失败"
+          print("[inject] supergateway_s20 注入 sysupgrade.itb 成功")
+          PY
 
       - name: Patch libffi InstallDev fficonfig.h path (out-of-tree build fix)
         working-directory: openwrt
