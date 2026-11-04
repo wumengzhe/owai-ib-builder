@@ -466,6 +466,12 @@ jobs:
       #   cp: cannot stat → .libffi_installed Error 1 → 整盘编译失败（libffi 是 base 库，5 平台都要编）。
       #   ✅ 改为 find 定位 fficonfig.h（任何布局通用），找不到则优雅跳过（2>/dev/null || true）。
       #   幂等：已替换过（源码不再含 $(GNU_TARGET_NAME)*/fficonfig.h 硬编码块）→ 跳过。
+      - name: Inject supergateway_s20 eMMC sysupgrade.itb (web-failsafe direct-flash FIT)
+        # S20 系列 eMMC + yuzhi U-Boot：原生只产 sysupgrade.tar，web failsafe/后台直刷 tar 会 brick。
+        # 注入自包含 FIT (sysupgrade.itb) 对齐 asus_rt-ax59u-ubi eMMC 模板；保留 tar 给 assembler 内部升级。
+        working-directory: openwrt
+        run: python3 $GITHUB_WORKSPACE/scripts/inject_supergateway_itb.py
+
       - name: Patch libffi InstallDev fficonfig.h path (out-of-tree build fix)
         working-directory: openwrt
         run: |
