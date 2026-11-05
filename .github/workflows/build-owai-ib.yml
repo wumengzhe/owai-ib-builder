@@ -838,6 +838,25 @@ jobs:
                      kmod-usb-serial-qualcomm; do
               echo "CONFIG_PACKAGE_${p}=y"
             done
+            # --- assembler 杂项 kmod（turboacc/zram/fan/passwall 依赖，跨平台通用）---
+            #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，下列 kmod 不在任何平台 DEFAULT_PACKAGES：
+            #     · kmod-tun          ← passwall/openvpn/wireguard 等隧道（2026-11-05 构建日志实锤缺）
+            #     · kmod-tcp-bbr      ← luci-app-turboacc（BBR 拥塞控制，实锤缺）
+            #     · kmod-sched-bbr    ← luci-app-turboacc（BBR 调度器，与 tcp-bbr 配套）
+            #     · kmod-zram         ← zram-swap（实锤缺）
+            #     · kmod-lib-zstd     ← zram zstd 压缩 / 通用（实锤缺）
+            #     · kmod-hwmon-pwmfan ← luci-app-fan（实锤缺）
+            #   均为 6.18 in-tree 标准模块，不含 kmod-ice/nat46/旧 ntfs 等雪崩驱动，安全。
+            #   不适用目标上选中不存在/依赖未满足的符号 → defconfig 静默忽略，零风险（见 L796）。
+            for p in kmod-tun kmod-tcp-bbr kmod-sched-bbr kmod-zram \
+                     kmod-lib-zstd kmod-hwmon-pwmfan; do
+              echo "CONFIG_PACKAGE_${p}=y"
+            done
+            # --- 用户态库 libatomic1（2026-11-05 实锤缺：luci-app-passwall → haproxy → libatomic1）---
+            #   25.12 base 链的 toolchain 产出 libatomic1；IB 默认不编它 → passwall 装不上
+            #   （日志: satisfy_dependencies_for luci-app-passwall: libatomic1）。IB 自带即与自身
+            #   libc 同代同源，满足 haproxy 依赖。不存在则 defconfig 静默忽略（零风险）。
+            echo "CONFIG_PACKAGE_libatomic1=y"
             # ⚠️ 不再关闭 rootfs（撤销 fd6c47c 的关 rootfs 块）：
             #   原关 rootfs 仅为让独立的 `make target/linux/install` 退化成只产 kernel.bin；
             #   现在已撤掉该独立步（见 Build 步），关 rootfs 反而会让 IB 运行期 make image
