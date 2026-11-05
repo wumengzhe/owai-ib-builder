@@ -792,7 +792,7 @@ jobs:
             #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，但各平台 DEFAULT_PACKAGES 极薄
             #   （mediatek 仅 leds-gpio/gpio-button-hotplug；qualcommax/rockchip 也不含 ipt/nft），
             #   而 assembler 注入的 WiFi 栈/ipt/nft/usb 必须进 IB 本地（owai 远程 kmod=0，见 build_lib.py:2212）。
-            #   故此处逐包显式 =m（⚠️ 必须 =m：kmod 只有作为模块才生成 .ipk 进 IB packages，=y 会内置进内核映像而不产 ipk，STANDALONE IB 本地池就找不到 → 见数据驱动注释）；
+            #   故此处逐包显式 =m（⚠️ 必须 =m：kmod 只有作为模块才生成 .ipk 进 IB packages，=y 会内置进内核映像而不产 ipk，STANDALONE IB 本地池就找不到 → 见手工精选注释）；
             #   在不适用的目标上选中不存在/依赖未满足的符号 → defconfig 静默忽略，零风险。
             # --- MediaTek filogic WiFi 栈（mediatek DEFAULT_PACKAGES 仅 leds-gpio/gpio-button-hotplug，
             #   必显式选；且仅限 mediatek）。⚠️ VIKINGYFY/immortalwrt 用**开源 mt76 栈**
@@ -848,48 +848,29 @@ jobs:
             #     · kmod-hwmon-pwmfan ← luci-app-fan（实锤缺）
             #   均为 6.18 in-tree 标准模块，不含 kmod-ice/nat46/旧 ntfs 等雪崩驱动，安全。
             #   不适用目标上选中不存在/依赖未满足的符号 → defconfig 静默忽略，零风险（见 L796）。
+            # --- assembler 杂项 kmod（turboacc/zram/fan/passwall/虚拟网/调度/文件系统/USB 等，跨平台通用）---
+            #   ⚠️ 手工精选（非数据驱动）：owai 索引里混有 owai 独占的【外部预编译】kmod
+            #     （gobinet/oaf/xdpi/natflow/sprd_pcie/qmi_wwan_f/qmi_wwan_q/pcie_mhi/ipt-wgobfs/
+            #      mhi-*/rmnet）—— 这些【不在 OpenWrt 主线/feeds】，IB 无法从源码编译；一旦被
+            #      强制选中, 构建阶段找不到对应包 Makefile 或编译失败 → 5 平台整体红
+            #      (94cba0b/0f39057 两次失败即此坑)。故只选【主线确实存在且 6.18 编得过】的 kmod。
+            #   均为 6.18 in-tree 标准模块；不适用目标上选中不存在/依赖未满足的符号 → defconfig 静默忽略。
+            #   注：batman-adv/fs-btrfs/cifs/ksmbd 等更重/偏门的暂未纳入（避免再次触发编译失败），
+            #      如对某插件必需, 后续单独加回并验证。
             for p in kmod-tun kmod-tcp-bbr kmod-sched-bbr kmod-zram \
-                     kmod-lib-zstd kmod-hwmon-pwmfan; do
+                     kmod-lib-zstd kmod-hwmon-pwmfan \
+                     kmod-dummy kmod-loop kmod-ifb kmod-veth kmod-vxlan kmod-ipvlan \
+                     kmod-netem kmod-sched kmod-sched-cake kmod-sched-ctinfo kmod-sched-red \
+                     kmod-netlink-diag kmod-inet-diag kmod-xdp-sockets-diag \
+                     kmod-ipt-fullconenat kmod-ipt-physdev kmod-nft-connlimit kmod-nft-queue \
+                     kmod-nf-conntrack6 kmod-nf-ipvs kmod-nf-nathelper kmod-nf-nathelper-extra \
+                     kmod-fs-ntfs3 kmod-fs-vfat kmod-fs-msdos \
+                     kmod-nls-cp437 kmod-nls-iso8859-1 kmod-nls-cp932 kmod-nls-cp936 kmod-nls-cp950 \
+                     kmod-usb-acm kmod-usb-printer kmod-usb-serial-option \
+                     kmod-usb-net-cdc-ncm kmod-usb-net-huawei-cdc-ncm kmod-usb-net-sierrawireless \
+                     kmod-wireguard kmod-gre kmod-ipsec; do
               echo "CONFIG_PACKAGE_${p}=m"
             done
-            # --- 【数据驱动】owai 远程源依赖的全部 kmod（根治「缺了好多 kmod」）---
-            #   ⚠️ 必须是 =m 不是 =y：OpenWrt kmod 只有作为模块(=m)才会生成独立 .ipk 进
-            #      IB 的 packages/ 目录；=y 会把模块直接内置进内核映像、不产出 .ipk，STANDALONE
-            #      IB 本地池就找不到该 kmod 包 → assembler/opkg 依赖不满足被剔除（前次 =y 即此坑）。
-            #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，而 owai 四 feed 有 128+ 用户态包
-            #   Depends kmod-*，远不止上方手列 6 个 → 依赖它们的插件被 assembler §4 静默剔除。
-            #   故此处直接吃 owai【冻结 25.12】真实索引（与 assembler 装包同源，dl.openwrt.ai/
-            #   releases/25.12），抽出所有 kmod-* 依赖全 =y 编进 IB 本地池：既全覆盖，又不会
-            #   触发 ALL_KMODS 雪崩（ice/nat46/旧ntfs 在 owai 依赖图里无引用 → 不被拉入）。
-            #   ⚠️ 必须用 $VERSION_REPO（=dl.openwrt.ai/releases/25.12）而非本地 feeds：本地
-            #      kiddin9 来自 GitHub main（随源漂），与 assembler 实际安装的冻结 25.12 可能脱代。
-            #   ⚠️ kmod 包名与 arch 无关（kmod-tun/kmod-usb-core 等跨 aarch64 同名），对
-            #      aarch64_cortex-a53 / aarch64_generic 取并集即覆盖全部 5 平台。
-            #   ⚠️ 跳过 6.18 已知编不过的雪崩驱动（feeds 已删的 rkp-ipid/quectel_MHI/libpfring/
-            #      shortcut-fe 不必列；此处防 ice/nat46/旧ntfs 被误拉进编译）。
-            #   ⚠️ 网络/解析失败时仅告警：上方手列清单 + 默认集作兜底，构建仍出固件。
-            _skip=" kmod-ice kmod-nat46 kmod-fs-ntfs "
-            _owai_kmods=""
-            for _ax in aarch64_cortex-a53 aarch64_generic; do
-              for _fd in kiddin9 packages base luci; do
-                _gz="/tmp/owai_${_ax}_${_fd}.gz"
-                curl -sSL -m 120 -o "$_gz" \
-                  "${VERSION_REPO}/packages/${_ax}/${_fd}/Packages.gz" 2>/dev/null || continue
-                _mg=$(head -c2 "$_gz" | od -An -tx1 | tr -d ' \n')
-                [ "$_mg" = "1f8b" ] || continue
-                _kk=$(zcat "$_gz" 2>/dev/null | grep -E '^Depends:' \
-                       | grep -oE 'kmod-[a-z0-9][a-z0-9_-]*' | LC_ALL=C sort -u)
-                _owai_kmods="$_owai_kmods $_kk"
-              done
-            done
-            _n=0
-            for p in $(echo "$_owai_kmods" | tr ' ' '\n' | LC_ALL=C sort -u); do
-              [ -z "$p" ] && continue
-              case " $_skip " in *" $p "*) continue ;; esac
-              echo "CONFIG_PACKAGE_${p}=m"
-              _n=$((_n+1))
-            done
-            echo "owai 依赖 kmod 数据驱动注入: ${_n} 种（已跳过 6.18 雪崩驱动）"
             # --- 用户态库 libatomic1（2026-11-05 实锤缺：luci-app-passwall → haproxy → libatomic1）---
             #   25.12 base 链的 toolchain 产出 libatomic1；IB 默认不编它 → passwall 装不上
             #   （日志: satisfy_dependencies_for luci-app-passwall: libatomic1）。IB 自带即与自身
@@ -1184,7 +1165,7 @@ jobs:
           fi
           # 抽 owai【冻结 25.12】四 feed（kiddin9/packages/base/luci）全部 kmod-* 依赖，
           # 对 aarch64_cortex-a53 / aarch64_generic 取并集（kmod 包名与 arch 无关），
-          # 与 Generate .config 的数据驱动注入【同源同口径】——此处作发布前校验门禁。
+          # 与 Generate .config 的【手工精选】kmod 注入【同源同口径】——此处作发布前校验门禁。
           # 不再只扫 kiddin9：packages/base/luci 也有 kmod 依赖（usb/storage 等），
           # 单扫会误报缺失（实为注入已覆盖）。
           : > /tmp/owai_kmods.txt
@@ -1215,17 +1196,28 @@ jobs:
           grep -Fxf /tmp/owai_kmods.txt /tmp/ib_kmods.txt | LC_ALL=C sort -u > /tmp/both_kmods.txt
           LC_ALL=C sort -u /tmp/owai_kmods.txt > /tmp/o_sorted.txt
           LC_ALL=C sort -u /tmp/ib_kmods.txt  > /tmp/i_sorted.txt
-          comm -23 /tmp/o_sorted.txt /tmp/both_kmods.txt > /tmp/missing_kmods.txt || true
+          comm -23 /tmp/o_sorted.txt /tmp/both_kmods.txt > /tmp/missing_raw.txt || true
+          # ⚠️ 剔除 owai 独占的【外部预编译】kmod：这些不在 OpenWrt 主线/feeds，IB 无法从源码
+          #   编译（94cba0b/0f39057 已实锤它们被强制选中会让构建整体红），故必然缺失、属预期，
+          #   不能算作「覆盖失败」。仅统计主线可编译但确实漏注入的，才是真问题。
+          _ext=" kmod-gobinet kmod-oaf kmod-xdpi kmod-natflow kmod-sprd_pcie kmod-qmi_wwan_f kmod-qmi_wwan_q kmod-pcie_mhi kmod-ipt-wgobfs kmod-mhi-net kmod-mhi-pci-generic kmod-mhi-wwan-ctrl kmod-mhi-wwan-mbim kmod-rmnet "
+          : > /tmp/missing_kmods.txt
+          _ext_n=0
+          for m in $(cat /tmp/missing_raw.txt); do
+            case " $_ext " in *" $m "*) _ext_n=$((_ext_n+1)); continue ;; esac
+            echo "$m" >> /tmp/missing_kmods.txt
+          done
           MISS=$(wc -l < /tmp/missing_kmods.txt)
-          echo "--- 缺失 kmod（owai 需要但 IB 没有），交集 $(wc -l < /tmp/both_kmods.txt) / owai $(wc -l < /tmp/o_sorted.txt) ---"
+          echo "--- 缺失 kmod（owai 需要但 IB 没有；已剔除 $_ext_n 个 owai 独占外部预编译 kmod，属预期）---"
+          echo "--- 交集 $(wc -l < /tmp/both_kmods.txt) / owai $(wc -l < /tmp/o_sorted.txt) ---"
           if [ "$MISS" -eq 0 ]; then
-            echo "无 ✓ kmod 全覆盖"
+            echo "无 ✓ kmod 全覆盖（外部预编译项除外，已计为预期）"
           else
             cat /tmp/missing_kmods.txt
-            echo "缺失合计 = $MISS"
-            # 只 warning 不 fail：这些 kmod 可能该 target 本就不支持（如 kmod-xdpi 需新内核），
-            # 由 assembler 的 §4 剔除即可；但必须显式点名，避免静默丢失插件。
-            echo "::warning::owai 依赖 $MISS 个 kmod 在 IB 本地缺失，依赖它们的插件将被 assembler 剔除（见上）"
+            echo "缺失合计（主线可编译范畴）= $MISS"
+            # 只 warning 不 fail：这些 kmod 可能该 target 本就不支持，由 assembler 的 §4 剔除即可；
+            # 但必须显式点名，避免静默丢失插件。
+            echo "::warning::owai 依赖 $MISS 个主线 kmod 在 IB 本地缺失，依赖它们的插件将被 assembler 剔除（见上）"
           fi
 
       # ⚠️ 生成代差自检：抽出 IB 跑 make info（与 assembler「镜像定义修复」后那步同构）。
