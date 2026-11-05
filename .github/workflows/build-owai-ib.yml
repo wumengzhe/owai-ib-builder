@@ -857,6 +857,19 @@ jobs:
             #   （日志: satisfy_dependencies_for luci-app-passwall: libatomic1）。IB 自带即与自身
             #   libc 同代同源，满足 haproxy 依赖。不存在则 defconfig 静默忽略（零风险）。
             echo "CONFIG_PACKAGE_libatomic1=y"
+            # --- 用户态 passwall C 依赖（按 IB libc 重建，根治 libatomic1 / 其它 libc 失配）---
+            #   haproxy 是 libatomic1 的唯一直属来源(build (1).log 388/1168 实锤: haproxy -> libatomic1)。
+            #   这些包若从 owai 冻结版(25.12 旧 libc/toolchain)拉, 与 IB 的 VIKINGYFY HEAD libc 漂开
+            #   -> 依赖(opkg 报 libatomic1 找不到)或符号失配。把它们编进 IB 本地池(同 toolchain/libc),
+            #   opkg 优先用 IB 本地版(IB 源在 repositories.conf 排 owai 之前) -> 彻底消除失配。
+            #   均为 packages 标准 C 小工具; 不存在/不适用目标的符号被 defconfig 静默忽略(零风险)。
+            #   ⚠️ 版本优先级陷阱: 若 owai 冻结版同名包版本号高于 IB 版, opkg 会选 owai 那份(又失配);
+            #      由 firmware-assembler 的 excise 守卫(检测到 IB 自带则抠掉 owai 同名项)兜底, 见 build.sh。
+            for p in haproxy v2ray-plugin dns2tcp ipt2socks microsocks \
+                     chinadns-ng dns2socks trojan-plus simple-obfs \
+                     kcptun-client shadowsocks-libev redsocks; do
+              echo "CONFIG_PACKAGE_${p}=y"
+            done
             # ⚠️ 不再关闭 rootfs（撤销 fd6c47c 的关 rootfs 块）：
             #   原关 rootfs 仅为让独立的 `make target/linux/install` 退化成只产 kernel.bin；
             #   现在已撤掉该独立步（见 Build 步），关 rootfs 反而会让 IB 运行期 make image
