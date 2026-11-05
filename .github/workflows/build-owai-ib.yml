@@ -852,6 +852,41 @@ jobs:
                      kmod-lib-zstd kmod-hwmon-pwmfan; do
               echo "CONFIG_PACKAGE_${p}=y"
             done
+            # --- 【数据驱动】owai 远程源依赖的全部 kmod（根治「缺了好多 kmod」）---
+            #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，而 owai 四 feed 有 128+ 用户态包
+            #   Depends kmod-*，远不止上方手列 6 个 → 依赖它们的插件被 assembler §4 静默剔除。
+            #   故此处直接吃 owai【冻结 25.12】真实索引（与 assembler 装包同源，dl.openwrt.ai/
+            #   releases/25.12），抽出所有 kmod-* 依赖全 =y 编进 IB 本地池：既全覆盖，又不会
+            #   触发 ALL_KMODS 雪崩（ice/nat46/旧ntfs 在 owai 依赖图里无引用 → 不被拉入）。
+            #   ⚠️ 必须用 $VERSION_REPO（=dl.openwrt.ai/releases/25.12）而非本地 feeds：本地
+            #      kiddin9 来自 GitHub main（随源漂），与 assembler 实际安装的冻结 25.12 可能脱代。
+            #   ⚠️ kmod 包名与 arch 无关（kmod-tun/kmod-usb-core 等跨 aarch64 同名），对
+            #      aarch64_cortex-a53 / aarch64_generic 取并集即覆盖全部 5 平台。
+            #   ⚠️ 跳过 6.18 已知编不过的雪崩驱动（feeds 已删的 rkp-ipid/quectel_MHI/libpfring/
+            #      shortcut-fe 不必列；此处防 ice/nat46/旧ntfs 被误拉进编译）。
+            #   ⚠️ 网络/解析失败时仅告警：上方手列清单 + 默认集作兜底，构建仍出固件。
+            _skip=" kmod-ice kmod-nat46 kmod-fs-ntfs "
+            _owai_kmods=""
+            for _ax in aarch64_cortex-a53 aarch64_generic; do
+              for _fd in kiddin9 packages base luci; do
+                _gz="/tmp/owai_${_ax}_${_fd}.gz"
+                curl -sSL -m 120 -o "$_gz" \
+                  "${VERSION_REPO}/packages/${_ax}/${_fd}/Packages.gz" 2>/dev/null || continue
+                _mg=$(head -c2 "$_gz" | od -An -tx1 | tr -d ' \n')
+                [ "$_mg" = "1f8b" ] || continue
+                _kk=$(zcat "$_gz" 2>/dev/null | grep -E '^Depends:' \
+                       | grep -oE 'kmod-[a-z0-9][a-z0-9_-]*' | LC_ALL=C sort -u)
+                _owai_kmods="$_owai_kmods $_kk"
+              done
+            done
+            _n=0
+            for p in $(echo "$_owai_kmods" | tr ' ' '\n' | LC_ALL=C sort -u); do
+              [ -z "$p" ] && continue
+              case " $_skip " in *" $p "*) continue ;; esac
+              echo "CONFIG_PACKAGE_${p}=y"
+              _n=$((_n+1))
+            done
+            echo "owai 依赖 kmod 数据驱动注入: ${_n} 种（已跳过 6.18 雪崩驱动）"
             # --- 用户态库 libatomic1（2026-11-05 实锤缺：luci-app-passwall → haproxy → libatomic1）---
             #   25.12 base 链的 toolchain 产出 libatomic1；IB 默认不编它 → passwall 装不上
             #   （日志: satisfy_dependencies_for luci-app-passwall: libatomic1）。IB 自带即与自身
@@ -1144,24 +1179,28 @@ jobs:
             echo "::error::无法从 staging_dir 推导 arch，kmod 覆盖自检无法进行"
             exit 1
           fi
-          curl -sSL -m 120 -o /tmp/kiddin9.gz \
-            "https://dl.openwrt.ai/releases/25.12/packages/${ARCH}/kiddin9/Packages.gz" || {
-            echo "::error::抓不到 owai kiddin9 索引（网络问题）——kmod 覆盖自检必须实测通过才准发布，不静默跳过"
-            exit 1
-          }
-          # gzip 魔术头校验（\x1f\x8b）：拦下 404 HTML 页等非 gzip 响应，防止 zcat 静默产出 0 行
-          MAGIC=$(head -c2 /tmp/kiddin9.gz | od -An -tx1 | tr -d ' \n')
-          if [ "$MAGIC" != "1f8b" ]; then
-            echo "::error::owai kiddin9 索引不是 gzip（magic=$MAGIC，URL=${ARCH}/kiddin9/Packages.gz）——抓错了，拒绝静默通过"
-            exit 1
-          fi
-          # 提取 Depends 中的 kmod-*（去版本号；正则允许下划线，如 kmod-sprd_pcie）
-          zcat /tmp/kiddin9.gz 2>/dev/null | grep -E '^Depends:' \
-            | grep -oE 'kmod-[a-z0-9][a-z0-9_-]*' | LC_ALL=C sort -u > /tmp/owai_kmods.txt
+          # 抽 owai【冻结 25.12】四 feed（kiddin9/packages/base/luci）全部 kmod-* 依赖，
+          # 对 aarch64_cortex-a53 / aarch64_generic 取并集（kmod 包名与 arch 无关），
+          # 与 Generate .config 的数据驱动注入【同源同口径】——此处作发布前校验门禁。
+          # 不再只扫 kiddin9：packages/base/luci 也有 kmod 依赖（usb/storage 等），
+          # 单扫会误报缺失（实为注入已覆盖）。
+          : > /tmp/owai_kmods.txt
+          for _ax in aarch64_cortex-a53 aarch64_generic; do
+            for _fd in kiddin9 packages base luci; do
+              _gz="/tmp/owai_chk_${_ax}_${_fd}.gz"
+              curl -sSL -m 120 -o "$_gz" \
+                "${VERSION_REPO}/packages/${_ax}/${_fd}/Packages.gz" 2>/dev/null || continue
+              _mg=$(head -c2 "$_gz" | od -An -tx1 | tr -d ' \n')
+              [ "$_mg" = "1f8b" ] || continue
+              zcat "$_gz" 2>/dev/null | grep -E '^Depends:' \
+                | grep -oE 'kmod-[a-z0-9][a-z0-9_-]*' >> /tmp/owai_kmods.txt
+            done
+          done
+          LC_ALL=C sort -u /tmp/owai_kmods.txt -o /tmp/owai_kmods.txt
           OWAI_N=$(wc -l < /tmp/owai_kmods.txt)
-          echo "owai 依赖的 kmod 种数 = $OWAI_N"
+          echo "owai 依赖的 kmod 种数（四 feed 并集）= $OWAI_N"
           if [ "$OWAI_N" -lt 50 ]; then
-            echo "::error::owai kmod 依赖只提取到 $OWAI_N 种（历史值 94~95）——索引解析异常，拒绝发布"
+            echo "::error::owai kmod 依赖只提取到 $OWAI_N 种（四 feed 并集应 >100）——索引解析异常，拒绝发布"
             exit 1
           fi
 
