@@ -792,7 +792,7 @@ jobs:
             #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，但各平台 DEFAULT_PACKAGES 极薄
             #   （mediatek 仅 leds-gpio/gpio-button-hotplug；qualcommax/rockchip 也不含 ipt/nft），
             #   而 assembler 注入的 WiFi 栈/ipt/nft/usb 必须进 IB 本地（owai 远程 kmod=0，见 build_lib.py:2212）。
-            #   故此处逐包显式 =y，等价于 CloseWRT-CI 在 Config/GENERAL.txt 列 kmod 的做法；
+            #   故此处逐包显式 =m（⚠️ 必须 =m：kmod 只有作为模块才生成 .ipk 进 IB packages，=y 会内置进内核映像而不产 ipk，STANDALONE IB 本地池就找不到 → 见数据驱动注释）；
             #   在不适用的目标上选中不存在/依赖未满足的符号 → defconfig 静默忽略，零风险。
             # --- MediaTek filogic WiFi 栈（mediatek DEFAULT_PACKAGES 仅 leds-gpio/gpio-button-hotplug，
             #   必显式选；且仅限 mediatek）。⚠️ VIKINGYFY/immortalwrt 用**开源 mt76 栈**
@@ -810,13 +810,13 @@ jobs:
                        mt7981-wo-firmware mt7986-wo-firmware \
                        kmod-mt7988-firmware mt7988-wo-firmware \
                        kmod-mt7622-firmware; do
-                echo "CONFIG_PACKAGE_${p}=y"
+                echo "CONFIG_PACKAGE_${p}=m"
               done
             fi
             # --- Qualcomm ath11k WiFi（qualcommax 默认已含，仅 qualcommax 补选兜底）---
             if [ "$BOARD" = "qualcommax" ]; then
               for p in kmod-ath11k kmod-ath11k-ahb kmod-ath11k-pci; do
-                echo "CONFIG_PACKAGE_${p}=y"
+                echo "CONFIG_PACKAGE_${p}=m"
               done
             fi
             # --- iptables / nftables 内核模块（assembler 注入，无任何平台默认含；跨平台通用）---
@@ -827,7 +827,7 @@ jobs:
                      kmod-nft-core kmod-nft-nat kmod-nft-offload kmod-nft-tproxy \
                      kmod-nft-fullcone kmod-nft-bridge \
                      kmod-ipset kmod-ipt-ipset kmod-ebtables kmod-nf-nat6 kmod-nf-flow; do
-              echo "CONFIG_PACKAGE_${p}=y"
+              echo "CONFIG_PACKAGE_${p}=m"
             done
             # --- USB 内核模块（filogic 默认不含；qualcommax/rockchip 部分默认含，补选兜底）---
             for p in kmod-usb-core kmod-usb2 kmod-usb3 kmod-usb-ohci kmod-usb-ehci \
@@ -836,7 +836,7 @@ jobs:
                      kmod-usb-net kmod-usb-net-rndis kmod-usb-net-cdc-ether \
                      kmod-usb-net-cdc-mbim kmod-usb-net-qmi-wwan \
                      kmod-usb-serial-qualcomm; do
-              echo "CONFIG_PACKAGE_${p}=y"
+              echo "CONFIG_PACKAGE_${p}=m"
             done
             # --- assembler 杂项 kmod（turboacc/zram/fan/passwall 依赖，跨平台通用）---
             #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，下列 kmod 不在任何平台 DEFAULT_PACKAGES：
@@ -850,9 +850,12 @@ jobs:
             #   不适用目标上选中不存在/依赖未满足的符号 → defconfig 静默忽略，零风险（见 L796）。
             for p in kmod-tun kmod-tcp-bbr kmod-sched-bbr kmod-zram \
                      kmod-lib-zstd kmod-hwmon-pwmfan; do
-              echo "CONFIG_PACKAGE_${p}=y"
+              echo "CONFIG_PACKAGE_${p}=m"
             done
             # --- 【数据驱动】owai 远程源依赖的全部 kmod（根治「缺了好多 kmod」）---
+            #   ⚠️ 必须是 =m 不是 =y：OpenWrt kmod 只有作为模块(=m)才会生成独立 .ipk 进
+            #      IB 的 packages/ 目录；=y 会把模块直接内置进内核映像、不产出 .ipk，STANDALONE
+            #      IB 本地池就找不到该 kmod 包 → assembler/opkg 依赖不满足被剔除（前次 =y 即此坑）。
             #   关掉 ALL_KMODS 后 IB 只含默认 kmod 集，而 owai 四 feed 有 128+ 用户态包
             #   Depends kmod-*，远不止上方手列 6 个 → 依赖它们的插件被 assembler §4 静默剔除。
             #   故此处直接吃 owai【冻结 25.12】真实索引（与 assembler 装包同源，dl.openwrt.ai/
@@ -883,7 +886,7 @@ jobs:
             for p in $(echo "$_owai_kmods" | tr ' ' '\n' | LC_ALL=C sort -u); do
               [ -z "$p" ] && continue
               case " $_skip " in *" $p "*) continue ;; esac
-              echo "CONFIG_PACKAGE_${p}=y"
+              echo "CONFIG_PACKAGE_${p}=m"
               _n=$((_n+1))
             done
             echo "owai 依赖 kmod 数据驱动注入: ${_n} 种（已跳过 6.18 雪崩驱动）"
