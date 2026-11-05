@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-# Inject sysupgrade.itb into supergateway_s20-common (eMMC + yuzhi U-Boot).
+# Inject eMMC sysupgrade.itb (self-contained FIT) into supergateway_s20-common.
 # S20 系列 eMMC + yuzhi U-Boot：原生定义只产 sysupgrade.tar，web failsafe/后台直刷 tar 会 brick。
-# 注入自包含 FIT (sysupgrade.itb)，对齐 asus_rt-ax59u-ubi eMMC 模板；保留 tar 给 assembler 内部升级。
+# 把 sysupgrade.bin 从 tar 直接改成自包含 FIT itb（文件名仍叫 .bin：assembler 的 build.sh 取像
+# 只认 *.bin、不认 .itb；FIT 魔数 0xd00dfeed 与扩展名无关，web-failsafe/LuCI 都照常识别）。
+# 对齐 asus_rt-ax59u-ubi / tplink_wma301-common 的 eMMC itb 模板。
+# 关键: supergateway 的 DEVICE_DTS 在 sub-device 的 $(call ...-common) 之后才赋值, 故 IMAGE recipe
+#       里的 $(KDIR)/$(DEVICE_DTS) 必须用双 $(延迟展开), 单 $ 会在 define 解析期展开成空 → image-.dtb。
 # 幂等：已注入则跳过。CWD 应为 openwrt/ 源码根。
 import sys, os
 
@@ -13,8 +17,8 @@ def main():
         sys.exit(1)
     s = open(p, encoding="utf-8").read()
 
-    if "\tIMAGE/sysupgrade.itb := append-kernel" in s:
-        print("[inject] 已含 sysupgrade.itb，跳过（幂等）")
+    if "\tIMAGE/sysupgrade.bin := append-kernel" in s:
+        print("[inject] 已含 s20 eMMC itb(sysupgrade.bin 内容) 注入，跳过（幂等）")
         sys.exit(0)
 
     block_anchor = "define Device/supergateway_s20-common"
@@ -26,23 +30,20 @@ def main():
         sys.exit(1)
     ji = s.find(img_anchor, bi)
     if ji == -1:
-        print("[inject] !! s20-common 内未找到 sysupgrade.bin 锚点")
+        print("[inject] !! s20-common 内未找到 sysupgrade.bin(tar) 锚点")
         sys.exit(1)
 
     inject = (
-        "\tIMAGES := sysupgrade.bin sysupgrade.itb\n"
+        "\tIMAGES := sysupgrade.bin\n"
         "\tKERNEL := kernel-bin | lzma\n"
-        "\tIMAGE/kernel := kernel-bin | append-dtb | lzma | fit lzma $(KDIR)/image-$(firstword $(DEVICE_DTS)).dtb\n"
-        "\tIMAGE/sysupgrade.itb := append-kernel | \\\n"
-        "\t\tfit lzma $(KDIR)/image-$(firstword $(DEVICE_DTS)).dtb external-with-rootfs | \\\n"
-        "\t\tpad-rootfs | append-metadata\n"
+        "\tIMAGE/sysupgrade.bin := append-kernel | fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-with-rootfs | append-metadata\n"
     )
 
-    s = s[:ji] + inject + s[ji:]
+    s = s[:ji] + inject + s[ji + len(img_anchor):]
     open(p, "w", encoding="utf-8").write(s)
 
-    assert "\tIMAGE/sysupgrade.itb := append-kernel" in s, "itb 注入校验失败"
-    print("[inject] supergateway_s20 注入 sysupgrade.itb 成功")
+    assert "\tIMAGE/sysupgrade.bin := append-kernel" in s, "s20 itb 注入校验失败"
+    print("[inject] supergateway_s20 注入 eMMC sysupgrade.itb(落为 sysupgrade.bin) 成功")
 
 
 if __name__ == "__main__":
