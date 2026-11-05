@@ -1,0 +1,40 @@
+run=41979706087 attempt=1 target=mediatek/filogic
+job_status=cancelled
+--- 若下面 make 日志末行是正常编译中、且无报错 → 说明 job 是【被取消/超时】，
+    而非编译失败。常见三因：① 超 timeout-minutes(330m) ② 6h runner 硬上限
+    ③ concurrency cancel-in-progress（同一分支新推送抢跑）
+    ④ GitHub Free 私有仓月度配额(2000min)耗尽 → job 排队未启动（日志会是空的）
+--- .config 关键项 ---
+CONFIG_TARGET_ROOTFS_INITRAMFS=y
+CONFIG_TARGET_ROOTFS_INITRAMFS_SEPARATE=y
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+CONFIG_TARGET_ROOTFS_DIR=""
+CONFIG_IB=y
+CONFIG_IB_STANDALONE=y
+CONFIG_PACKAGE_libip4tc=m
+CONFIG_PACKAGE_libip6tc=m
+CONFIG_PACKAGE_libiptext=m
+CONFIG_PACKAGE_libiptext6=m
+CONFIG_PACKAGE_libxtables=m
+CONFIG_PACKAGE_curl=m
+CONFIG_PACKAGE_ip6tables-nft=m
+CONFIG_PACKAGE_ip6tables-zz-legacy=m
+CONFIG_PACKAGE_iptables-nft=m
+CONFIG_PACKAGE_iptables-zz-legacy=m
+CONFIG_PACKAGE_xtables-legacy=m
+CONFIG_PACKAGE_xtables-nft=m
+--- 内核镜像数（后缀随 KERNEL_SUFFIX 变；预期 > 0；target/linux/install 产出）---
+0
+--- KDIR(linux-* 非 firmware) 顶层内容前 20 ---
+--- bin/packages 关键包（core 仓库那批）---
+--- filogic bootloader config 符号（mt7981 =y 行数 + jcg 样本）---
+76
+CONFIG_PACKAGE_u-boot-mt7981_jcg_q30-pro=y
+CONFIG_PACKAGE_trusted-firmware-a-mt7981-spim-nand-ddr3=y
+--- IB 内 FIP/bl2 清单 + jcg 精确判定（诊断 FIP 门禁的根因现场）---
+(未找到 IB tar.zst)
+--- Build 步 make 实际报错（2026-10-31 二次修：run55 尾部80行只有 perl 收尾+Error 2，
+    并行 make 下真凶在日志中部。改为：① 所有 make[?]*** 失败目标行 ② 首个失败目标
+    前后上下文 ③ 常见错误模式行 ④ 尾部100行）---
+(无 /tmp/build.log)
