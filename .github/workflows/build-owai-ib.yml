@@ -820,6 +820,18 @@ jobs:
                 echo "CONFIG_PACKAGE_${p}=m"
               done
             fi
+            # --- Airoha AN7581/AN7583 WiFi（airoha DEFAULT_PACKAGES 仅 npu-firmware/
+            #   uboot-envtools，无 802.11 栈；fiberhome_hg5585f-ct 等带 WiFi 的设备
+            #   DEVICE_PACKAGES 列了 kmod-mt7915e，但其 PCIe WiFi 卡驱动 + 基带固件 +
+            #   cfg80211/mac80211 必须进 IB 本地，owai 远程 kmod=0。注入与 filogic 同构的
+            #   mt76 栈；build (2).log 实锤 kmod-mt7915e 被整片跳过→无线族缺失→ABI 致命→
+            #   固件被判不可用。注：XG-040G-MD/MF 等无 WiFi 的 AN7581 设备不受影响，多编的
+            #   kmod 仅占用 IB 体积，不会装进无 WiFi 设备的 rootfs）。
+            if [ "$BOARD" = "airoha" ]; then
+              for p in kmod-mt76 kmod-mt7915e kmod-mt7915-firmware; do
+                echo "CONFIG_PACKAGE_${p}=m"
+              done
+            fi
             # --- iptables / nftables 内核模块（assembler 注入，无任何平台默认含；跨平台通用）---
             for p in kmod-ipt-conntrack kmod-ipt-core kmod-ipt-extra kmod-ipt-filter \
                      kmod-ipt-ipopt kmod-ipt-iprange kmod-ipt-nat kmod-ipt-nat-extra \
